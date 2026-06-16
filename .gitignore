@@ -1,0 +1,16 @@
+# 業務文書（非公開）— GitHub にアップロードしない
+*.docx
+*.pdf
+*.xlsx
+*.pptx
+
+# 一時ファイル・OS生成物
+~$*
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# エディタ/ツール設定
+.claude/
+.vscode/
+.idea/

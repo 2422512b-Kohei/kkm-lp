@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KKM｜神戸大生専門 家庭教師紹介サービス</title>
+  <meta name="description" content="神大生をもっと身近に。勉強習慣作りに神戸大生が伴走します。教材費・管理費は0円。事前面談をクリアした認定講師をご紹介する、神戸大生特化型の家庭教師直接マッチングサービスです。" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              DEFAULT: '#13294b',
+              light: '#1e3a64',
+              dark: '#0c1c34',
+            },
+            gold: {
+              DEFAULT: '#f5a623',
+              light: '#ffc24d',
+              dark: '#e08e0b',
+            },
+          },
+          fontFamily: {
+            sans: ['"Noto Sans JP"', 'sans-serif'],
+            round: ['"Zen Maru Gothic"', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+    body { -webkit-tap-highlight-color: transparent; }
+    /* アコーディオンの開閉アニメーション */
+    .acc-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease, padding 0.35s ease;
+    }
+    .acc-item.open .acc-body { max-height: 320px; }
+    .acc-item.open .acc-icon { transform: rotate(45deg); }
+    .acc-icon { transition: transform 0.3s ease; }
+    /* セクションの登場アニメーション */
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.shown { opacity: 1; transform: translateY(0); }
+    /* スマホ下部のフローティングCTA分の余白 */
+    @media (max-width: 768px) { body { padding-bottom: 80px; } }
+  </style>
+</head>
+
+<body class="font-sans text-navy bg-white antialiased">
+
+  <!-- ===== ヘッダー ===== -->
+  <header class="sticky top-0 z-40 bg-navy/95 backdrop-blur supports-[backdrop-filter]:bg-navy/80 text-white shadow-md">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+      <a href="#hero" class="flex items-center gap-2 font-round font-bold tracking-wide">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gold text-navy font-black">K</span>
+        <span class="text-base sm:text-lg">KKM<span class="text-gold">.</span></span>
+      </a>
+      <a href="https://lin.ee/ny4sXSw" target="_blank" rel="noopener" class="hidden md:inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-navy font-bold text-sm px-4 py-2 rounded-full transition">
+        <i class="fa-brands fa-line text-base"></i> 無料相談
+      </a>
+    </div>
+  </header>
+
+  <!-- ===== ① ヒーローセクション ===== -->
+  <section id="hero" class="relative overflow-hidden bg-navy text-white">
+    <!-- 背景装飾 -->
+    <div class="absolute inset-0 opacity-20 pointer-events-none"
+         style="background-image: radial-gradient(circle at 20% 20%, #1e3a64 0, transparent 40%), radial-gradient(circle at 85% 75%, #1e3a64 0, transparent 40%);"></div>
+    <div class="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-gold/10 blur-3xl pointer-events-none"></div>
+
+    <div class="relative max-w-5xl mx-auto px-5 pt-12 pb-14 sm:pt-16 sm:pb-20">
+      <p class="inline-flex items-center gap-2 text-xs sm:text-sm font-medium bg-white/10 border border-white/15 rounded-full px-3 py-1 mb-5">
+        <i class="fa-solid fa-graduation-cap text-gold"></i> 神戸大生専門・家庭教師紹介サービス
+      </p>
+
+      <h1 class="font-round font-bold leading-tight text-4xl sm:text-6xl mb-5">
+        神大生を<br class="sm:hidden" /><span class="text-gold">もっと身近に。</span>
+      </h1>
+
+      <p class="text-sm sm:text-lg leading-relaxed text-white/85 max-w-2xl mb-7">
+        勉強習慣作りに神戸大生が伴走します。<span class="text-gold font-bold">教材費・管理費は0円。</span>
+        事前面談をクリアした、お子様の「憧れの先輩」になる認定講師をご紹介。
+      </p>
+
+      <!-- 訴求ポイント -->
+      <div class="grid sm:grid-cols-3 gap-3 mb-9">
+        <div class="flex items-start gap-3 bg-white/5 border border-white/10 rounded-xl p-3.5">
+          <i class="fa-solid fa-pen-to-square text-gold text-lg mt-0.5"></i>
+          <div>
+            <p class="font-bold text-sm">宿題のサポートに</p>
+            <p class="text-xs text-white/70 mt-0.5">一人では進まないものを、隣でサポート</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3 bg-white/5 border border-white/10 rounded-xl p-3.5">
+          <i class="fa-solid fa-list-check text-gold text-lg mt-0.5"></i>
+          <div>
+            <p class="font-bold text-sm">ご家庭の方針をそのまま実行</p>
+            <p class="text-xs text-white/70 mt-0.5">「このワークをやってほしい」を先輩の視点でサポート</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3 bg-white/5 border border-white/10 rounded-xl p-3.5">
+          <i class="fa-solid fa-face-smile text-gold text-lg mt-0.5"></i>
+          <div>
+            <p class="font-bold text-sm">「勉強しなさい」を減らす</p>
+            <p class="text-xs text-white/70 mt-0.5">第三者が関わり、親子のストレスを減らしながら学習を継続</p>
+          </div>
+        </div>
+      </div>
+
+      <a href="https://lin.ee/ny4sXSw" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-navy font-bold text-base px-7 py-3.5 rounded-full shadow-lg shadow-gold/20 transition">
+        <i class="fa-brands fa-line text-xl"></i> 公式LINEで無料相談・問い合わせ
+      </a>
+    </div>
+
+    <!-- 下の波線 -->
+    <div class="relative">
+      <svg viewBox="0 0 1440 60" class="w-full h-8 sm:h-12 text-white" preserveAspectRatio="none">
+        <path fill="currentColor" d="M0,32 C360,72 1080,-8 1440,32 L1440,60 L0,60 Z"></path>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ===== ② 親の悩み共感セクション ===== -->
+  <section class="py-14 px-5 bg-white">
+    <div class="max-w-4xl mx-auto reveal">
+      <p class="text-center text-gold font-bold text-sm mb-2"><i class="fa-solid fa-comment-dots"></i> こんなお悩みありませんか？</p>
+      <h2 class="text-center font-round font-bold text-2xl sm:text-3xl mb-8">ご家庭の「もやもや」に、寄り添います</h2>
+
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div class="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <span class="shrink-0 mt-0.5 w-6 h-6 rounded-md bg-navy text-white flex items-center justify-center text-xs"><i class="fa-solid fa-check"></i></span>
+          <p class="text-sm leading-relaxed">塾で質問できずに<strong>おいていかれる</strong>／マンツーマンで指導してほしい</p>
+        </div>
+        <div class="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <span class="shrink-0 mt-0.5 w-6 h-6 rounded-md bg-navy text-white flex items-center justify-center text-xs"><i class="fa-solid fa-check"></i></span>
+          <p class="text-sm leading-relaxed">「勉強しなさい」と<strong>言いすぎている</strong>／家で全然勉強しない</p>
+        </div>
+        <div class="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <span class="shrink-0 mt-0.5 w-6 h-6 rounded-md bg-navy text-white flex items-center justify-center text-xs"><i class="fa-solid fa-check"></i></span>
+          <p class="text-sm leading-relaxed">大したことのないサービスに、毎月<strong>高額を支払っている</strong></p>
+        </div>
+        <div class="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <span class="shrink-0 mt-0.5 w-6 h-6 rounded-md bg-navy text-white flex items-center justify-center text-xs"><i class="fa-solid fa-check"></i></span>
+          <p class="text-sm leading-relaxed">マッチングするまで<strong>どんな教師かわからない</strong>／安心して個人契約をしたい</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ③ サービスの4大特徴と他社比較 ===== -->
+  <section class="py-14 px-5 bg-navy text-white">
+    <div class="max-w-5xl mx-auto">
+      <div class="reveal text-center mb-10">
+        <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-star"></i> KKMが選ばれる理由</p>
+        <h2 class="font-round font-bold text-2xl sm:text-3xl">サービスの<span class="text-gold">4大特徴</span></h2>
+        <p class="text-white/70 text-sm mt-2">他社との違いを、はっきりと。</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-5">
+
+        <!-- カード1 -->
+        <div class="reveal bg-white text-navy rounded-2xl p-6 shadow-xl">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-11 h-11 rounded-xl bg-gold/15 text-gold flex items-center justify-center text-xl"><i class="fa-solid fa-coins"></i></span>
+            <div>
+              <p class="text-xs text-gold font-bold">特徴 01</p>
+              <h3 class="font-round font-bold text-lg">圧倒的な低コスト</h3>
+            </div>
+          </div>
+          <p class="text-sm leading-relaxed text-slate-700">
+            かかる費用は<strong>初回のマッチング手数料のみ</strong>。安く抑えられる理由は、①家庭と講師の個人契約のサポートに特化、②学生が運営、③地域密着。
+          </p>
+          <div class="mt-4 flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg p-3">
+            <i class="fa-solid fa-triangle-exclamation text-red-400 text-xs mt-0.5"></i>
+            <p class="text-xs text-red-500 leading-relaxed">他社だと…　紹介料で3万円以上、さらに毎月の管理費・システム利用料や、不要な教材費をセット請求されるケースも。</p>
+          </div>
+        </div>
+
+        <!-- カード2 -->
+        <div class="reveal bg-white text-navy rounded-2xl p-6 shadow-xl">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-11 h-11 rounded-xl bg-gold/15 text-gold flex items-center justify-center text-xl"><i class="fa-solid fa-user-graduate"></i></span>
+            <div>
+              <p class="text-xs text-gold font-bold">特徴 02</p>
+              <h3 class="font-round font-bold text-lg">厳選された講師陣</h3>
+            </div>
+          </div>
+          <p class="text-sm leading-relaxed text-slate-700">
+            講師は<strong>神戸大学生限定</strong>。人間性や指導への情熱を重視した独自の<strong>10基準</strong>をクリアした学生を集めています。全員、事前に面談済みです。
+          </p>
+          <div class="mt-4 flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg p-3">
+            <i class="fa-solid fa-triangle-exclamation text-red-400 text-xs mt-0.5"></i>
+            <p class="text-xs text-red-500 leading-relaxed">他社だと…　登録制で講師の質にばらつきがあり、学力が十分に担保されていない場合がある。</p>
+          </div>
+        </div>
+
+        <!-- カード3 -->
+        <div class="reveal bg-white text-navy rounded-2xl p-6 shadow-xl">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-11 h-11 rounded-xl bg-gold/15 text-gold flex items-center justify-center text-xl"><i class="fa-solid fa-handshake"></i></span>
+            <div>
+              <p class="text-xs text-gold font-bold">特徴 03</p>
+              <h3 class="font-round font-bold text-lg">納得のマッチング</h3>
+            </div>
+          </div>
+          <p class="text-sm leading-relaxed text-slate-700">
+            契約前に<strong>20分間のオンライン面談</strong>を実施（ご家庭・講師・運営が参加）。講師の人柄や相性、指導内容を直接確認したうえで契約いただけます。
+          </p>
+          <div class="mt-4 flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg p-3">
+            <i class="fa-solid fa-triangle-exclamation text-red-400 text-xs mt-0.5"></i>
+            <p class="text-xs text-red-500 leading-relaxed">他社だと…　いきなり授業開始だったり、相性のミスマッチが起こる可能性がある。</p>
+          </div>
+        </div>
+
+        <!-- カード4 -->
+        <div class="reveal bg-white text-navy rounded-2xl p-6 shadow-xl">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-11 h-11 rounded-xl bg-gold/15 text-gold flex items-center justify-center text-xl"><i class="fa-solid fa-arrows-rotate"></i></span>
+            <div>
+              <p class="text-xs text-gold font-bold">特徴 04</p>
+              <h3 class="font-round font-bold text-lg">直接契約の柔軟性</h3>
+            </div>
+          </div>
+          <p class="text-sm leading-relaxed text-slate-700">
+            紹介後は<strong>ご家庭と講師の直接契約</strong>。指導料・支払い方法・スケジュールなどを、両者の話し合いのもとで柔軟に調整できます。
+          </p>
+          <div class="mt-4 flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg p-3">
+            <i class="fa-solid fa-triangle-exclamation text-red-400 text-xs mt-0.5"></i>
+            <p class="text-xs text-red-500 leading-relaxed">他社だと…　運営会社を通すためスケジュール変更や料金調整の自由度が低い。個人契約が禁止の場合も。</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ④ 教材について ===== -->
+  <section class="py-14 px-5 bg-gold/10">
+    <div class="max-w-3xl mx-auto reveal text-center">
+      <span class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gold text-navy text-2xl mb-4 shadow"><i class="fa-solid fa-book-open"></i></span>
+      <h2 class="font-round font-bold text-2xl sm:text-3xl mb-4">高額な教材販売は<br class="sm:hidden" />一切ありません</h2>
+      <p class="text-sm sm:text-base leading-relaxed text-slate-700">
+        当サービスではオリジナルの教材販売などは一切行いません。学校の宿題や、今ご家庭で使われているワーク、お子様に合わせたい参考書などを<strong class="text-navy">そのまま教材として使用</strong>し、効率的な勉強習慣をサポートします。
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== ⑤ 講師のクオリティ「10の認定基準」（アコーディオン） ===== -->
+  <section class="py-14 px-5 bg-white">
+    <div class="max-w-3xl mx-auto">
+      <div class="reveal text-center mb-8">
+        <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-medal"></i> 講師のクオリティ</p>
+        <h2 class="font-round font-bold text-2xl sm:text-3xl">10の認定基準</h2>
+        <p class="text-slate-500 text-sm mt-2">各項目をタップすると詳しい内容が開きます</p>
+      </div>
+
+      <div id="accordion" class="space-y-3 reveal">
+        <!-- 各item -->
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">1</span><span class="font-bold text-sm sm:text-base">コミュニケーション力・言語化力</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">難しい概念を、生徒のレベルに合わせて噛み砕いて説明できるか。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">2</span><span class="font-bold text-sm sm:text-base">寄り添い力・共感力</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">「なぜできないのか」を責めず、心理的な安全基盤を作れるか。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">3</span><span class="font-bold text-sm sm:text-base">誠実性</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">時間厳守、身だしなみ、報連相の速さといった社会人性。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">4</span><span class="font-bold text-sm sm:text-base">学力の再現性（メタ認知力）</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">解けない生徒に対して、どういう手順で思考すべきかを体系的に教えられるか。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">5</span><span class="font-bold text-sm sm:text-base">教養の幅と深さ</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">勉強だけでなく、趣味や特技について魅力的に語れるか。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">6</span><span class="font-bold text-sm sm:text-base">戦略力・逆算思考</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">目標から逆算して、今日何をすべきかのロードマップを描く力。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">7</span><span class="font-bold text-sm sm:text-base">ロールモデルとしての魅力（オーラ）</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">「この人みたいになりたい」と思わせる清潔感、自信、謙虚さ。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">8</span><span class="font-bold text-sm sm:text-base">自走支援力（習慣化の種まき）</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">教師がいない自習時間に生徒をどう動かすか。宿題や動機付けの工夫ができるか。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">9</span><span class="font-bold text-sm sm:text-base">挫折克服経験</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">苦労や失敗をどう乗り越えたかという、生徒の壁に寄り添うための経験値。</p></div>
+        </div>
+
+        <div class="acc-item border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <button class="acc-head w-full flex items-center justify-between gap-3 text-left px-4 py-4">
+            <span class="flex items-center gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center">10</span><span class="font-bold text-sm sm:text-base">責任感・教育意欲</span></span>
+            <i class="acc-icon fa-solid fa-plus text-gold"></i>
+          </button>
+          <div class="acc-body"><p class="px-4 pb-4 pt-0 text-sm text-slate-600 leading-relaxed">単なるバイト以上の責任感を持って参画しているか。</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ⑥ シンプルな料金プラン ===== -->
+  <section class="py-14 px-5 bg-slate-50">
+    <div class="max-w-4xl mx-auto">
+      <div class="reveal text-center mb-8">
+        <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-tags"></i> 料金プラン</p>
+        <h2 class="font-round font-bold text-2xl sm:text-3xl">シンプルで、わかりやすい。</h2>
+        <p class="text-slate-500 text-sm mt-2">お支払いは<strong class="text-navy">初回の一度きり</strong>です</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-5 reveal">
+        <!-- 通常 -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <p class="text-sm font-bold text-navy mb-1">通常認定プラン</p>
+          <p class="text-xs text-slate-500 mb-4">講師評価 <strong>4.0以上</strong></p>
+          <p class="font-round font-bold text-navy"><span class="text-4xl">14,000</span><span class="text-base">円</span></p>
+          <p class="text-xs text-slate-500 mt-1">初回のみ</p>
+        </div>
+        <!-- プレミアム -->
+        <div class="relative bg-navy text-white rounded-2xl p-6 shadow-xl ring-2 ring-gold">
+          <span class="absolute -top-3 right-4 bg-gold text-navy text-xs font-bold px-3 py-1 rounded-full shadow">おすすめ</span>
+          <p class="text-sm font-bold mb-1">プレミアムプラン</p>
+          <p class="text-xs text-white/70 mb-4">講師評価 <strong class="text-gold">4.5以上</strong></p>
+          <p class="font-round font-bold text-gold"><span class="text-4xl">20,000</span><span class="text-base">円</span></p>
+          <p class="text-xs text-white/70 mt-1">初回のみ</p>
+        </div>
+      </div>
+
+      <ul class="mt-6 space-y-2 text-xs text-slate-600 max-w-2xl mx-auto reveal">
+        <li class="flex gap-2"><i class="fa-solid fa-circle-check text-gold mt-0.5"></i> 月額費用、教材費、管理費は一切かかりません。</li>
+        <li class="flex gap-2"><i class="fa-solid fa-circle-check text-gold mt-0.5"></i> 1ヶ月以内の教師変更・再紹介は一律 5,000円 で対応。</li>
+        <li class="flex gap-2"><i class="fa-solid fa-circle-check text-gold mt-0.5"></i> 体験授業は一律 1時間 2,000円（＋交通費）で実施可能。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== ⑦ 指導料金（月謝）の目安 ===== -->
+  <section class="py-14 px-5 bg-white">
+    <div class="max-w-4xl mx-auto">
+      <div class="reveal text-center mb-3">
+        <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-yen-sign"></i> 指導料金の目安</p>
+        <h2 class="font-round font-bold text-2xl sm:text-3xl">月謝の一般的な目安</h2>
+      </div>
+      <p class="text-center text-xs text-slate-500 mb-8 reveal">※ 指導料金は家庭と教師で直接決めていただくものですが、一般的な目安です。</p>
+
+      <div class="grid sm:grid-cols-3 gap-4 reveal">
+        <div class="rounded-2xl border border-slate-200 p-6 text-center hover:border-gold transition">
+          <span class="inline-flex w-12 h-12 rounded-full bg-gold/15 text-gold items-center justify-center text-xl mb-3"><i class="fa-solid fa-child"></i></span>
+          <p class="font-bold text-navy mb-1">小学生</p>
+          <p class="font-round font-bold text-navy"><span class="text-3xl">2,000</span><span class="text-sm">円 / 時</span></p>
+          <p class="text-xs text-slate-500 mt-2">補習・宿題管理</p>
+        </div>
+        <div class="rounded-2xl border border-slate-200 p-6 text-center hover:border-gold transition">
+          <span class="inline-flex w-12 h-12 rounded-full bg-gold/15 text-gold items-center justify-center text-xl mb-3"><i class="fa-solid fa-pen-ruler"></i></span>
+          <p class="font-bold text-navy mb-1">中学生</p>
+          <p class="font-round font-bold text-navy"><span class="text-3xl">2,500</span><span class="text-sm">円 / 時</span></p>
+          <p class="text-xs text-slate-500 mt-2">定期テスト・公立高校受験対策</p>
+        </div>
+        <div class="rounded-2xl border border-slate-200 p-6 text-center hover:border-gold transition">
+          <span class="inline-flex w-12 h-12 rounded-full bg-gold/15 text-gold items-center justify-center text-xl mb-3"><i class="fa-solid fa-graduation-cap"></i></span>
+          <p class="font-bold text-navy mb-1">高校生</p>
+          <p class="font-round font-bold text-navy"><span class="text-3xl">3,000</span><span class="text-sm">円 / 時</span></p>
+          <p class="text-xs text-slate-500 mt-2">定期テスト・大学受験対策</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ⑧ ご利用の流れ ===== -->
+  <section class="py-14 px-5 bg-navy text-white">
+    <div class="max-w-2xl mx-auto">
+      <div class="reveal text-center mb-10">
+        <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-route"></i> ご利用の流れ</p>
+        <h2 class="font-round font-bold text-2xl sm:text-3xl">初回授業まで、7ステップ</h2>
+      </div>
+
+      <ol class="relative border-l-2 border-dashed border-gold/40 ml-4 space-y-7 reveal">
+        <li class="relative pl-8">
+          <span class="absolute -left-[1.15rem] top-0 w-8 h-8 rounded-full bg-gold text-navy font-bold flex items-center justify-center text-sm shadow">1</span>
+          <p class="font-bold">お問い合わせ・無料相談</p>
+        </li>
+        <li class="relative pl-8">
+          <span class="absolute -left-[1.15rem] top-0 w-8 h-8 rounded-full bg-gold text-navy font-bold flex items-center justify-center text-sm shadow">2</span>
+          <p class="font-bold">生徒のヒアリング</p>
+          <p class="text-xs text-white/70 mt-1">現状学力・目標・ご要望をお伺いし、講師とのマッチングを行います。</p>
+        </li>
+        <li class="relative pl-8">
+          <span class="absolute -left-[1.15rem] top-0 w-8 h-8 rounded-full bg-gold text-navy font-bold flex items-center justify-center text-sm shadow">3</span>
+          <p class="font-bold">講師の選定</p>
+          <p class="text-xs text-white/70 mt-1">条件に合う講師候補を三名提示し、ご家庭に選択いただきます。</p>
+        </li>
+        <li class="relative pl-8">
+          <span class="absolute -left-[1.15rem] top-0 w-8 h-8 rounded-full bg-gold text-navy font-bold flex items-center justify-center text-sm shadow">4</span>
+          <p class="font-bold">事前のオンライン3者面談</p>
+          <p class="text-xs text-white/70 mt-1">ご家庭・講師・運営で、相性や指導内容のすり合わせを行います。</p>
+        </li>
+        <li class="relative pl-8">
+          <span class="absolute -left-[1.15rem] top-0 w-8 h-8 rounded-full bg-gold text-navy font-bold flex items-center justify-center text-sm shadow">5</span>
+          <p class="font-bold">成約判断</p>
+          <p class="text-xs text-white/70 mt-1">※ 合わない場合、2回以内なら別講師をご提案することも可能です。</p>
+        </li>
+        <li class="relative pl-8">
+          <span class="absolute -left-[1.15rem] top-0 w-8 h-8 rounded-full bg-gold text-navy font-bold flex items-center justify-center text-sm shadow">6</span>
+          <p class="font-bold">マッチング手数料のご入金</p>
+        </li>
+        <li class="relative pl-8">
+          <span class="absolute -left-[1.15rem] top-0 w-8 h-8 rounded-full bg-white text-navy font-bold flex items-center justify-center text-sm shadow ring-2 ring-gold">7</span>
+          <p class="font-bold text-gold">初回授業スタート！</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===== お問い合わせ CTA ===== -->
+  <section id="contact" class="py-16 px-5 bg-gold">
+    <div class="max-w-2xl mx-auto text-center text-navy">
+      <h2 class="font-round font-bold text-2xl sm:text-3xl mb-3">まずは気軽に、ご相談ください。</h2>
+      <p class="text-sm sm:text-base mb-7 text-navy/80">ご相談・お問い合わせは公式LINEから。しつこい勧誘は一切いたしません。</p>
+      <a href="https://lin.ee/ny4sXSw" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 bg-navy hover:bg-navy-light text-white font-bold text-base px-8 py-4 rounded-full shadow-lg transition">
+        <i class="fa-brands fa-line text-xl text-green-400"></i> 公式LINEで無料相談・問い合わせ
+      </a>
+    </div>
+  </section>
+
+  <!-- ===== ⑨ フッター ===== -->
+  <footer class="bg-navy-dark text-white/70 px-5 py-12">
+    <div class="max-w-3xl mx-auto">
+      <div class="flex items-center gap-2 font-round font-bold text-white mb-4">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gold text-navy font-black">K</span>
+        <span class="text-lg">KKM<span class="text-gold">.</span></span>
+      </div>
+
+      <p class="text-sm leading-relaxed mb-6">
+        大手の機械的なマッチングや高額な手数料に疑問を持ち、立ち上げた「<strong class="text-white">神戸大生特化型</strong>」の家庭教師直接マッチングサービスです。お子様にとっての「憧れの先輩」との出会いをお届けします。
+      </p>
+
+      <div class="space-y-3 text-xs leading-relaxed border-t border-white/10 pt-6">
+        <p><i class="fa-solid fa-circle-info text-gold mr-1"></i> 本サービスは家庭教師の紹介を行うサービスであり、授業契約は<strong class="text-white">家庭と教師の直接契約</strong>となります。</p>
+        <p><i class="fa-solid fa-circle-info text-gold mr-1"></i> 紹介から6ヶ月以内に、当サービスを介さずご家庭と講師が直接（中抜き）契約を結ぶことは、違約金の対象となりますのでご注意ください。</p>
+      </div>
+
+      <p class="text-center text-xs text-white/40 mt-8">© 2026 KKM（仮称）｜神戸大生専門 家庭教師紹介サービス</p>
+    </div>
+  </footer>
+
+  <!-- ===== スマホ下部 追従フローティングCTA ===== -->
+  <div class="md:hidden fixed bottom-0 inset-x-0 z-50 p-3 bg-white/80 backdrop-blur border-t border-slate-200">
+    <a href="https://lin.ee/ny4sXSw" target="_blank" rel="noopener"
+       class="flex items-center justify-center gap-2 w-full bg-gold active:bg-gold-dark text-navy font-bold text-base py-3.5 rounded-full shadow-lg">
+      <i class="fa-brands fa-line text-xl"></i> 公式LINEで無料相談
+    </a>
+  </div>
+
+  <!-- ===== JavaScript ===== -->
+  <script>
+    // --- アコーディオン（複数同時開閉OK） ---
+    document.querySelectorAll('#accordion .acc-head').forEach(function (head) {
+      head.addEventListener('click', function () {
+        head.closest('.acc-item').classList.toggle('open');
+      });
+    });
+
+    // --- スクロールで要素をふわっと表示 ---
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('shown');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal').forEach(function (el) { observer.observe(el); });
+  </script>
+</body>
+</html>
