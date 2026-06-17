@@ -8,7 +8,7 @@
   <meta http-equiv="Expires" content="0" />
   <title>インターン日程かぶりチェッカー</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     body { background:#f8fafc; color:#0f172a; font-family:system-ui,-apple-system,sans-serif; }
     .company-tag { display:inline-block; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:600; margin:1px; }
@@ -98,24 +98,57 @@ function loadCache() {
 // ============================================================
 //  起動・認証
 // ============================================================
-async function boot() {
-  const { url, key } = getConfig();
-  if (!url || !key) { state.view = "config"; render(); return; }
-  if (typeof supabase === "undefined" || !supabase.createClient) {
-    state.view = "config";
-    state.authMsg = "Supabase ライブラリの読み込みに失敗しました。通信環境をご確認ください。";
-    render(); return;
-  }
-  supa = supabase.createClient(url, key);
-  try {
-    const { data } = await supa.auth.getSession();
-    session = data.session;
-  } catch(e) { session = null; }
-  supa.auth.onAuthStateChange((_event, s) => {
-    session = s;
-    afterAuth();
+// Promise にタイムアウトを付ける（ネットワーク待ちで固まらないように）
+function withTimeout(p, ms) {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms)),
+  ]);
+}
+// Supabase ライブラリ(UMD)が読み込まれるまで待つ
+function waitForSupabase(maxMs) {
+  return new Promise(resolve => {
+    const t0 = Date.now();
+    (function check() {
+      if (typeof supabase !== "undefined" && supabase.createClient) return resolve(true);
+      if (Date.now() - t0 > maxMs) return resolve(false);
+      setTimeout(check, 100);
+    })();
   });
-  afterAuth();
+}
+
+async function boot() {
+  try {
+    const { url, key } = getConfig();
+    if (!url || !key) { state.view = "config"; render(); return; }
+
+    const ready = await waitForSupabase(8000);
+    if (!ready) {
+      state.view = "config";
+      state.authMsg = "Supabase ライブラリの読み込みに失敗しました。通信環境を確認して再読込してください。";
+      render(); return;
+    }
+
+    supa = supabase.createClient(url, key);
+
+    try {
+      const { data } = await withTimeout(supa.auth.getSession(), 8000);
+      session = data ? data.session : null;
+    } catch(e) {
+      session = null; // 取得失敗・タイムアウトでも先へ進む（ログイン画面へ）
+    }
+
+    try {
+      supa.auth.onAuthStateChange((_event, s) => { session = s; afterAuth(); });
+    } catch(e) {}
+
+    await afterAuth();
+  } catch(err) {
+    // 何があっても「読み込み中」で固まらせない
+    state.view = "config";
+    state.authMsg = "初期化エラー: " + (err && err.message ? err.message : String(err)) + "（接続情報を確認してください）";
+    render();
+  }
 }
 
 async function afterAuth() {
@@ -130,9 +163,10 @@ async function loadCloud() {
   if (!supa || !session) return;
   setSync("読込中…");
   try {
-    const { data, error } = await supa
-      .from("schedules").select("data")
-      .eq("user_id", session.user.id).maybeSingle();
+    const { data, error } = await withTimeout(
+      supa.from("schedules").select("data").eq("user_id", session.user.id).maybeSingle(),
+      10000
+    );
     if (error) throw error;
     state.companies = (data && Array.isArray(data.data)) ? data.data : [];
     cacheLocal();
@@ -153,10 +187,10 @@ function scheduleSave() {
 async function saveCloud() {
   if (!supa || !session) return;
   try {
-    const { error } = await supa.from("schedules").upsert(
+    const { error } = await withTimeout(supa.from("schedules").upsert(
       { user_id: session.user.id, data: state.companies, updated_at: new Date().toISOString() },
       { onConflict: "user_id" }
-    );
+    ), 10000);
     if (error) throw error;
     setSync("☁️ 同期済み");
   } catch(e) {
