@@ -4,336 +4,302 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>インターン日程かぶりチェッカー</title>
-  <meta name="description" content="複数のインターン候補日程をテキストから一括抽出し、カレンダー上で日程の重複を可視化します。" />
-
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React 18 (UMD) + Babel standalone（ビルド不要でJSXをそのまま実行） -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    body { background-color: #f8fafc; color: #0f172a; }
+    body { background:#f8fafc; color:#0f172a; font-family:system-ui,-apple-system,sans-serif; }
+    .company-tag { display:inline-block; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:600; margin:1px; }
+    .date-chip { display:inline-block; border-radius:6px; padding:1px 8px; font-size:11px; font-weight:500; margin:2px; background:#fff; box-shadow:0 0 0 1px #e2e8f0; }
+    .cell-conflict2 { background:#fff1f2 !important; box-shadow:0 0 0 1px #fecaca; }
+    .cell-conflict3 { background:#fee2e2 !important; box-shadow:0 0 0 2px #fca5a5; }
+    .cell-normal { background:#fff; box-shadow:0 0 0 1px #f1f5f9; }
+    .badge-conflict { background:#ef4444; color:#fff; border-radius:4px; padding:0 4px; font-size:9px; font-weight:700; white-space:nowrap; }
+    textarea { font-family:inherit; }
+    button:disabled { cursor:not-allowed; opacity:0.5; }
   </style>
 </head>
-<body class="antialiased">
-  <div id="root"></div>
+<body>
 
-  <script type="text/babel" data-presets="react">
-    const { useState, useEffect } = React;
+<div id="app"></div>
 
-    const CURRENT_YEAR = 2026;
-    const STORAGE_KEY = "intern-schedule-overlap:companies:v1";
+<script>
+const YEAR = 2026;
+const STORAGE_KEY = "intern-schedule-overlap:companies:v1";
+const COLORS = [
+  { name:"ブルー",     bg:"#dbeafe", text:"#1e40af", accent:"#3b82f6" },
+  { name:"グリーン",   bg:"#dcfce7", text:"#166534", accent:"#22c55e" },
+  { name:"パープル",   bg:"#ede9fe", text:"#5b21b6", accent:"#8b5cf6" },
+  { name:"オレンジ",   bg:"#ffedd5", text:"#9a3412", accent:"#f97316" },
+  { name:"ピンク",     bg:"#fce7f3", text:"#9d174d", accent:"#ec4899" },
+  { name:"ティール",   bg:"#ccfbf1", text:"#115e59", accent:"#14b8a6" },
+  { name:"イエロー",   bg:"#fef9c3", text:"#854d0e", accent:"#eab308" },
+  { name:"インディゴ", bg:"#e0e7ff", text:"#3730a3", accent:"#6366f1" },
+];
+const WEEKDAYS = ["日","月","火","水","木","金","土"];
+const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 
-    const PASTEL_COLORS = [
-      { name: "ブルー",     bg: "#dbeafe", text: "#1e40af", accent: "#3b82f6" },
-      { name: "グリーン",   bg: "#dcfce7", text: "#166534", accent: "#22c55e" },
-      { name: "パープル",   bg: "#ede9fe", text: "#5b21b6", accent: "#8b5cf6" },
-      { name: "オレンジ",   bg: "#ffedd5", text: "#9a3412", accent: "#f97316" },
-      { name: "ピンク",     bg: "#fce7f3", text: "#9d174d", accent: "#ec4899" },
-      { name: "ティール",   bg: "#ccfbf1", text: "#115e59", accent: "#14b8a6" },
-      { name: "イエロー",   bg: "#fef9c3", text: "#854d0e", accent: "#eab308" },
-      { name: "インディゴ", bg: "#e0e7ff", text: "#3730a3", accent: "#6366f1" },
-    ];
+let state = { companies:[], month:6, inputName:"", inputText:"" };
 
-    function pickColor(usedNames) {
-      const unused = PASTEL_COLORS.find((c) => !usedNames.includes(c.name));
-      if (unused) return unused;
-      return PASTEL_COLORS[usedNames.length % PASTEL_COLORS.length];
-    }
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) state.companies = p; }
+  } catch(e) {}
+}
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.companies)); } catch(e) {}
+}
 
-    function parseDates(text) {
-      const results = [];
-      const seen = new Set();
-      const push = (month, day) => {
-        if (!Number.isInteger(month) || !Number.isInteger(day)) return;
-        if (month < 1 || month > 12) return;
-        if (day < 1 || day > 31) return;
-        const key = month + "-" + day;
-        if (seen.has(key)) return;
-        seen.add(key);
-        results.push({ month, day });
-      };
-      const jpRe = /(\d{1,2})\s*月\s*(\d{1,2})\s*日/g;
-      let m;
-      while ((m = jpRe.exec(text)) !== null) push(Number(m[1]), Number(m[2]));
-      const slashRe = /(?<![\d/])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d/])/g;
-      while ((m = slashRe.exec(text)) !== null) push(Number(m[1]), Number(m[2]));
-      results.sort((a, b) => a.month - b.month || a.day - b.day);
-      return results;
-    }
+function parseDates(text) {
+  const results = [], seen = new Set();
+  const push = (m,d) => {
+    m=+m; d=+d;
+    if (!m||!d||m<1||m>12||d<1||d>31) return;
+    const k=m+"-"+d; if(seen.has(k)) return;
+    seen.add(k); results.push({month:m,day:d});
+  };
+  const jpRe = /(\d{1,2})\s*月\s*(\d{1,2})\s*日/g;
+  let m;
+  while((m=jpRe.exec(text))) push(m[1],m[2]);
+  const slashRe = /\b(\d{1,2})\/(\d{1,2})\b/g;
+  while((m=slashRe.exec(text))) { if(+m[1]>=1&&+m[1]<=12) push(m[1],m[2]); }
+  results.sort((a,b)=>a.month-b.month||a.day-b.day);
+  return results;
+}
+function guessName(text) {
+  const line = text.split(/\r?\n/).map(l=>l.trim()).find(l=>l.length>0)||"";
+  const before = line.split(/(\d{1,2}\s*月|\d{1,2}\s*\/)/)[0].trim();
+  return (before||line).replace(/[、,：:].*/,"").trim();
+}
+function pickColor(used) {
+  return COLORS.find(c=>!used.includes(c.name)) || COLORS[used.length%COLORS.length];
+}
+function uid() {
+  return (typeof crypto!=="undefined"&&crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Date.now()+"-"+Math.random().toString(36).slice(2);
+}
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
 
-    function guessCompanyName(text) {
-      const firstLine = text.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0);
-      if (!firstLine) return "";
-      const beforeDate = firstLine.split(/(\d{1,2}\s*月|\d{1,2}\s*\/)/)[0].trim();
-      return (beforeDate || firstLine).replace(/[、,:：].*$/, "").trim();
-    }
+function renderHeader() {
+  const vis = state.companies.filter(c=>c.visible);
+  const map = new Map();
+  vis.forEach(c=>c.dates.forEach(d=>{ const k=d.month+"-"+d.day; map.set(k,(map.get(k)||0)+1); }));
+  const total = [...map.values()].filter(n=>n>=2).length;
+  const badge = total>0
+    ? `<span style="display:flex;align-items:center;gap:6px;background:#fee2e2;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#b91c1c">⚠️ 重複 ${total} 日</span>`
+    : `<span style="display:flex;align-items:center;gap:6px;background:#d1fae5;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#065f46">✅ 重複なし</span>`;
+  return `<header style="border-bottom:1px solid #e2e8f0;background:#fff;">
+    <div style="max-width:1280px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:16px 20px;">
+      <div style="width:40px;height:40px;background:#4f46e5;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;">📅</div>
+      <div>
+        <h1 style="font-size:17px;font-weight:900;color:#0f172a;margin:0">インターン日程かぶりチェッカー</h1>
+        <p style="font-size:11px;color:#64748b;margin:0">候補日程を貼り付けて ${YEAR} 年の重複を一目で確認</p>
+      </div>
+      <div style="margin-left:auto">${badge}</div>
+    </div>
+  </header>`;
+}
 
-    const Icon = ({ d, size = 18, className = "" }) => (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-        strokeLinejoin="round" className={className}>{d}</svg>
-    );
-    const PlusIcon = (p) => <Icon {...p} d={<><path d="M12 5v14"/><path d="M5 12h14"/></>} />;
-    const TrashIcon = (p) => <Icon {...p} d={<><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>} />;
-    const EyeIcon = (p) => <Icon {...p} d={<><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></>} />;
-    const EyeOffIcon = (p) => <Icon {...p} d={<><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/></>} />;
-    const ChevronLeftIcon = (p) => <Icon {...p} d={<path d="m15 18-6-6 6-6"/>} />;
-    const ChevronRightIcon = (p) => <Icon {...p} d={<path d="m9 18 6-6-6-6"/>} />;
-
-    const PLACEHOLDER = "例:\n関西電力 全6日程\n第1回:7月21日(火)、第2回:8月4日(火)、第3回:9月8日(火)\n\nまたは\nA社 8/4, 8/5, 9/1";
-
-    function InputForm({ onAdd }) {
-      const [name, setName] = useState("");
-      const [text, setText] = useState("");
-      const preview = parseDates(text);
-      const effectiveName = name.trim() || guessCompanyName(text);
-
-      const handleAdd = () => {
-        const dates = parseDates(text);
-        if (dates.length === 0) return;
-        const finalName = name.trim() || guessCompanyName(text) || "名称未設定";
-        onAdd(finalName, dates, text);
-        setName(""); setText("");
-      };
-
-      return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white"><PlusIcon /></div>
-            <h2 className="text-base font-bold text-slate-800">日程を追加</h2>
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-500">企業名（空欄なら1行目から自動取得）</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="例: 関西電力"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-500">日程テキスト（コピペでOK）</label>
-              <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={PLACEHOLDER} rows={6}
-                className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
-            </div>
-            {text.trim().length > 0 && (
-              <div className="rounded-lg bg-slate-50 p-3">
-                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                  ✨ 抽出結果プレビュー
-                  {effectiveName && <span className="text-indigo-600">／ {effectiveName}</span>}
-                </div>
-                {preview.length === 0 ? (
-                  <p className="text-xs text-slate-400">日付が見つかりません（「7月21日」や「8/4」の形式で入力してください）</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {preview.map((d) => (
-                      <span key={d.month + "-" + d.day} className="rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200">{d.month}/{d.day}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <button onClick={handleAdd} disabled={preview.length === 0}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300">
-              <PlusIcon size={16} /> カレンダーに追加{preview.length > 0 ? "（" + preview.length + "件）" : ""}
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    function Sidebar({ companies, onToggle, onRemove }) {
-      return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-white">🏢</div>
-              <h2 className="text-base font-bold text-slate-800">登録企業</h2>
-            </div>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">{companies.length}社</span>
-          </div>
-          {companies.length === 0 ? (
-            <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-xs text-slate-400">まだ企業が登録されていません。<br />左のフォームから日程を追加してください。</p>
-          ) : (
-            <ul className="space-y-2">
-              {companies.map((c) => (
-                <li key={c.id} className="group rounded-xl border border-slate-200 p-3 transition hover:border-slate-300" style={{ opacity: c.visible ? 1 : 0.55 }}>
-                  <div className="flex items-center gap-2.5">
-                    <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: c.color.accent }} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-slate-800">{c.name}</p>
-                      <p className="text-xs text-slate-400">{c.dates.length}日程</p>
-                    </div>
-                    <button onClick={() => onToggle(c.id)} title={c.visible ? "非表示にする" : "表示する"} className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
-                      {c.visible ? <EyeIcon size={16} /> : <EyeOffIcon size={16} />}
-                    </button>
-                    <button onClick={() => onRemove(c.id)} title="削除" className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"><TrashIcon size={16} /></button>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {c.dates.map((d) => (
-                      <span key={d.month + "-" + d.day} className="rounded px-1.5 py-0.5 text-[11px] font-medium" style={{ backgroundColor: c.color.bg, color: c.color.text }}>{d.month}/{d.day}</span>
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      );
-    }
-
-    const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
-    function conflictCellStyle(count) {
-      if (count >= 3) return "bg-red-100 ring-2 ring-red-300";
-      if (count >= 2) return "bg-red-50 ring-1 ring-red-200";
-      return "bg-white ring-1 ring-slate-100";
-    }
-
-    function Calendar({ companies, year, month, onPrevMonth, onNextMonth, onToday }) {
-      const visibleCompanies = companies.filter((c) => c.visible);
-      const firstWeekday = new Date(year, month - 1, 1).getDay();
-      const daysInMonth = new Date(year, month, 0).getDate();
-      let conflictDays = 0;
-      const cells = [];
-      for (let i = 0; i < firstWeekday; i++) cells.push(null);
-      for (let day = 1; day <= daysInMonth; day++) {
-        const events = [];
-        for (const c of visibleCompanies) {
-          if (c.dates.some((d) => d.month === month && d.day === day)) {
-            events.push({ companyId: c.id, name: c.name, bg: c.color.bg, text: c.color.text });
-          }
-        }
-        if (events.length >= 2) conflictDays++;
-        cells.push({ day, events, count: events.length });
+function renderInputForm() {
+  const preview = parseDates(state.inputText);
+  const ename = esc(state.inputName.trim()||guessName(state.inputText));
+  const previewHtml = state.inputText.trim()==="" ? "" : `
+    <div style="background:#f8fafc;border-radius:8px;padding:12px;margin-top:8px">
+      <div style="font-size:11px;font-weight:600;color:#64748b;margin-bottom:6px">✨ 抽出プレビュー${ename?` <span style="color:#4f46e5">／ ${ename}</span>`:""}</div>
+      ${preview.length===0
+        ? `<p style="font-size:11px;color:#94a3b8">日付が見つかりません（「7月21日」や「8/4」の形式で入力してください）</p>`
+        : preview.map(d=>`<span class="date-chip">${d.month}/${d.day}</span>`).join("")
       }
-      while (cells.length % 7 !== 0) cells.push(null);
+    </div>`;
+  return `<div style="border:1px solid #e2e8f0;background:#fff;border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <div style="width:32px;height:32px;background:#4f46e5;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700">+</div>
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin:0">日程を追加</h2>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;color:#64748b;margin-bottom:4px">企業名（空欄なら1行目から自動取得）</label>
+        <input id="inp-name" type="text" value="${esc(state.inputName)}" placeholder="例: 関西電力"
+          style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;font-size:13px;outline:none" />
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;color:#64748b;margin-bottom:4px">日程テキスト（コピペでOK）</label>
+        <textarea id="inp-text" rows="6" placeholder="例:
+関西電力 全6日程
+第1回:7月21日(火)、第2回:8月4日(火)
 
-      return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-black text-slate-800">{year}年 {month}月</h2>
-              {conflictDays > 0 && (
-                <span className="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">⚠️ この月に {conflictDays} 日の重複</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button onClick={onPrevMonth} className="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50" aria-label="前の月"><ChevronLeftIcon /></button>
-              <button onClick={onToday} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50">今月</button>
-              <button onClick={onNextMonth} className="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50" aria-label="次の月"><ChevronRightIcon /></button>
-            </div>
+または
+A社 8/4, 8/5, 9/1"
+          style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.6;outline:none;resize:vertical">${esc(state.inputText)}</textarea>
+      </div>
+      ${previewHtml}
+      <button id="btn-add" ${preview.length===0?"disabled":""}
+        style="width:100%;padding:10px;border-radius:8px;background:${preview.length===0?"#cbd5e1":"#4f46e5"};color:#fff;font-size:13px;font-weight:700;border:none;cursor:${preview.length===0?"not-allowed":"pointer"}">
+        ＋ カレンダーに追加${preview.length>0?`（${preview.length}件）`:""}
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderSidebar() {
+  const cs = state.companies;
+  const list = cs.length===0
+    ? `<p style="background:#f8fafc;border-radius:8px;padding:24px;text-align:center;font-size:11px;color:#94a3b8">まだ企業が登録されていません。<br>左のフォームから追加してください。</p>`
+    : cs.map(c=>`<li style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;opacity:${c.visible?1:0.55}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:14px;height:14px;border-radius:50%;background:${c.color.accent};flex-shrink:0"></span>
+          <div style="flex:1;min-width:0">
+            <p style="font-size:13px;font-weight:700;color:#1e293b;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</p>
+            <p style="font-size:11px;color:#94a3b8;margin:0">${c.dates.length}日程</p>
           </div>
-          <div className="mb-1 grid grid-cols-7 gap-1.5">
-            {WEEKDAYS.map((w, i) => (
-              <div key={w} className={"py-1 text-center text-xs font-bold " + (i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-slate-400")}>{w}</div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1.5">
-            {cells.map((cell, idx) => {
-              if (!cell) return <div key={"empty-" + idx} className="min-h-[92px]" />;
-              const weekday = idx % 7;
-              return (
-                <div key={cell.day} className={"min-h-[92px] rounded-xl p-1.5 transition " + conflictCellStyle(cell.count)}>
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className={"text-xs font-bold " + (weekday === 0 ? "text-red-500" : weekday === 6 ? "text-blue-500" : "text-slate-500")}>{cell.day}</span>
-                    {cell.count >= 2 && <span className="flex items-center gap-0.5 rounded bg-red-500 px-1 py-0.5 text-[9px] font-bold leading-none text-white">⚠️ {cell.count}社</span>}
-                  </div>
-                  <div className="space-y-1">
-                    {cell.events.map((e) => (
-                      <div key={e.companyId} className="truncate rounded px-1.5 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: e.bg, color: e.text }} title={e.name}>{e.name}</div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <button class="btn-toggle" data-id="${c.id}" title="${c.visible?"非表示":"表示"}" style="background:none;border:none;cursor:pointer;padding:6px;color:#94a3b8;border-radius:6px">
+            ${c.visible?svgEye():svgEyeOff()}
+          </button>
+          <button class="btn-remove" data-id="${c.id}" title="削除" style="background:none;border:none;cursor:pointer;padding:6px;color:#94a3b8;border-radius:6px">
+            ${svgTrash()}
+          </button>
         </div>
-      );
-    }
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap">
+          ${c.dates.map(d=>`<span class="company-tag" style="background:${c.color.bg};color:${c.color.text}">${d.month}/${d.day}</span>`).join("")}
+        </div>
+      </li>`).join("");
+  return `<div style="border:1px solid #e2e8f0;background:#fff;border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:32px;height:32px;background:#1e293b;border-radius:8px;display:flex;align-items:center;justify-content:center">🏢</div>
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin:0">登録企業</h2>
+      </div>
+      <span style="background:#f1f5f9;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:600;color:#475569">${cs.length}社</span>
+    </div>
+    <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">${list}</ul>
+  </div>`;
+}
 
-    function App() {
-      const [companies, setCompanies] = useState([]);
-      const [month, setMonth] = useState(6);
-      const [loaded, setLoaded] = useState(false);
+function renderCalendar() {
+  const vis = state.companies.filter(c=>c.visible);
+  const y=YEAR, mo=state.month;
+  const firstDay = new Date(y,mo-1,1).getDay();
+  const daysInMonth = new Date(y,mo,0).getDate();
+  let conflictCount=0;
+  const cells=[];
+  for(let i=0;i<firstDay;i++) cells.push(null);
+  for(let d=1;d<=daysInMonth;d++) {
+    const events=vis.filter(c=>c.dates.some(dt=>dt.month===mo&&dt.day===d)).map(c=>({name:c.name,bg:c.color.bg,text:c.color.text}));
+    if(events.length>=2) conflictCount++;
+    cells.push({day:d,events});
+  }
+  while(cells.length%7!==0) cells.push(null);
 
-      useEffect(() => {
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) setCompanies(parsed);
-          }
-        } catch (e) {}
-        setLoaded(true);
-      }, []);
+  const conflictBadge = conflictCount>0
+    ? `<span style="display:flex;align-items:center;gap:4px;background:#fee2e2;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;color:#b91c1c">⚠️ この月 ${conflictCount} 日の重複</span>`
+    : "";
+  const monthOpts = MONTHS.map(m=>`<option value="${m}" ${m===mo?"selected":""}>${m}月</option>`).join("");
 
-      useEffect(() => {
-        if (!loaded) return;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(companies)); } catch (e) {}
-      }, [companies, loaded]);
+  const cellsHtml = cells.map((cell,idx)=>{
+    if(!cell) return `<div style="min-height:88px"></div>`;
+    const wd=idx%7;
+    const evts=cell.events;
+    const cellBg = evts.length>=3?"#fee2e2":evts.length>=2?"#fff1f2":"#fff";
+    const cellShadow = evts.length>=3?"0 0 0 2px #fca5a5":evts.length>=2?"0 0 0 1px #fecaca":"0 0 0 1px #f1f5f9";
+    const dayColor = wd===0?"#ef4444":wd===6?"#3b82f6":"#64748b";
+    const badge = evts.length>=2?`<span class="badge-conflict">⚠️ ${evts.length}社</span>`:"";
+    const tags = evts.map(ev=>`<div style="background:${ev.bg};color:${ev.text};border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(ev.name)}">${esc(ev.name)}</div>`).join("");
+    return `<div style="min-height:88px;border-radius:10px;padding:6px;background:${cellBg};box-shadow:${cellShadow}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:11px;font-weight:700;color:${dayColor}">${cell.day}</span>${badge}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">${tags}</div>
+    </div>`;
+  }).join("");
 
-      const addCompany = (name, dates, rawText) => {
-        setCompanies((prev) => {
-          const color = pickColor(prev.map((c) => c.color.name));
-          const id = (typeof crypto !== "undefined" && crypto.randomUUID)
-            ? crypto.randomUUID()
-            : Date.now() + "-" + Math.random().toString(36).slice(2);
-          return [...prev, { id, name, color, dates, visible: true, rawText }];
-        });
-        if (dates.length > 0) setMonth(dates[0].month);
-      };
-      const toggleCompany = (id) => setCompanies((prev) => prev.map((c) => c.id === id ? { ...c, visible: !c.visible } : c));
-      const removeCompany = (id) => setCompanies((prev) => prev.filter((c) => c.id !== id));
-      const prevMonth = () => setMonth((m) => (m <= 1 ? 1 : m - 1));
-      const nextMonth = () => setMonth((m) => (m >= 12 ? 12 : m + 1));
-      const goToday = () => setMonth(6);
+  return `<div style="border:1px solid #e2e8f0;background:#fff;border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <h2 style="font-size:20px;font-weight:900;color:#1e293b;margin:0">${y}年 ${mo}月</h2>
+        ${conflictBadge}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button id="btn-prev" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:14px">◄</button>
+        <select id="sel-month" style="border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;font-size:13px;font-weight:700;outline:none">${monthOpts}</select>
+        <button id="btn-next" style="border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:14px">►</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">
+      ${WEEKDAYS.map((w,i)=>`<div style="text-align:center;font-size:11px;font-weight:700;padding:4px 0;color:${i===0?"#ef4444":i===6?"#3b82f6":"#94a3b8"}">${w}</div>`).join("")}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${cellsHtml}</div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;border:1px solid #e2e8f0;background:#fff;border-radius:16px;padding:12px 20px;font-size:11px;color:#64748b">
+    <span style="font-weight:600;color:#334155">凡例:</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:20px;height:12px;border-radius:3px;background:#fff1f2;box-shadow:0 0 0 1px #fecaca;display:inline-block"></span>2社重複</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:20px;height:12px;border-radius:3px;background:#fee2e2;box-shadow:0 0 0 2px #fca5a5;display:inline-block"></span>3社以上重複</span>
+    <span style="display:flex;align-items:center;gap:6px"><span class="badge-conflict">⚠️ N社</span>重複している日</span>
+  </div>`;
+}
 
-      const visible = companies.filter((c) => c.visible);
-      const dayMap = new Map();
-      for (const c of visible) for (const d of c.dates) {
-        const key = d.month + "-" + d.day;
-        dayMap.set(key, (dayMap.get(key) || 0) + 1);
-      }
-      const totalConflicts = Array.from(dayMap.values()).filter((n) => n >= 2).length;
+function svgEye(){return`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;}
+function svgEyeOff(){return`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/></svg>`;}
+function svgTrash(){return`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;}
 
-      return (
-        <main className="min-h-screen">
-          <header className="border-b border-slate-200 bg-white">
-            <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white text-xl">📅</div>
-              <div>
-                <h1 className="text-lg font-black tracking-tight text-slate-900">インターン日程かぶりチェッカー</h1>
-                <p className="text-xs text-slate-500">候補日程を貼り付けて、{CURRENT_YEAR}年の重複を一目で確認</p>
-              </div>
-              <div className="ml-auto">
-                {totalConflicts > 0 ? (
-                  <span className="flex items-center gap-1.5 rounded-full bg-red-100 px-3.5 py-1.5 text-sm font-bold text-red-700">⚠️ 重複 {totalConflicts} 日</span>
-                ) : (
-                  <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-3.5 py-1.5 text-sm font-bold text-emerald-700">✅ 重複なし</span>
-                )}
-              </div>
-            </div>
-          </header>
+function render() {
+  document.getElementById("app").innerHTML =
+    renderHeader() +
+    `<div style="max-width:1280px;margin:0 auto;padding:20px">
+      <div style="display:grid;grid-template-columns:1fr;gap:20px">` +
+    (window.innerWidth>=1024
+      ? `<div style="display:contents"><div style="grid-column:1;width:340px;display:flex;flex-direction:column;gap:20px">${renderInputForm()}${renderSidebar()}</div><div style="grid-column:2;display:flex;flex-direction:column;gap:16px">${renderCalendar()}</div></div>`
+      : `<div style="display:flex;flex-direction:column;gap:20px">${renderInputForm()}${renderSidebar()}${renderCalendar()}</div>`) +
+    `</div></div>`;
+  // レイアウト修正：大画面は2カラム
+  if(window.innerWidth>=1024) {
+    const wrap = document.querySelector("#app > div > div");
+    if(wrap) { wrap.style.gridTemplateColumns="340px 1fr"; wrap.style.display="grid"; }
+  }
+  bindEvents();
+}
 
-          <div className="mx-auto grid max-w-7xl grid-cols-1 gap-5 px-6 py-6 lg:grid-cols-[340px_1fr]">
-            <div className="space-y-5">
-              <InputForm onAdd={addCompany} />
-              <Sidebar companies={companies} onToggle={toggleCompany} onRemove={removeCompany} />
-            </div>
-            <div className="space-y-4">
-              <Calendar companies={companies} year={CURRENT_YEAR} month={month} onPrevMonth={prevMonth} onNextMonth={nextMonth} onToday={goToday} />
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
-                <span className="font-semibold text-slate-600">凡例:</span>
-                <span className="flex items-center gap-1.5"><span className="h-3 w-5 rounded bg-red-50 ring-1 ring-red-200" />2社重複</span>
-                <span className="flex items-center gap-1.5"><span className="h-3 w-5 rounded bg-red-100 ring-2 ring-red-300" />3社以上重複</span>
-                <span className="flex items-center gap-1.5"><span className="rounded bg-red-500 px-1 py-0.5 text-[9px] font-bold text-white">⚠️ N社</span>重複している日数</span>
-              </div>
-            </div>
-          </div>
-        </main>
-      );
-    }
+function bindEvents() {
+  const inpName = document.getElementById("inp-name");
+  const inpText = document.getElementById("inp-text");
+  if(inpName) inpName.addEventListener("input", function(){ state.inputName=this.value; render(); });
+  if(inpText) inpText.addEventListener("input", function(){ state.inputText=this.value; render(); });
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+  const btnAdd = document.getElementById("btn-add");
+  if(btnAdd) btnAdd.addEventListener("click", ()=>{
+    const dates = parseDates(state.inputText);
+    if(!dates.length) return;
+    const name = state.inputName.trim()||guessName(state.inputText)||"名称未設定";
+    const color = pickColor(state.companies.map(c=>c.color.name));
+    state.companies.push({id:uid(),name,color,dates,visible:true,rawText:state.inputText});
+    if(dates.length) state.month=dates[0].month;
+    state.inputName=""; state.inputText="";
+    save(); render();
+  });
+
+  const btnPrev = document.getElementById("btn-prev");
+  const btnNext = document.getElementById("btn-next");
+  const selMonth = document.getElementById("sel-month");
+  if(btnPrev) btnPrev.addEventListener("click",()=>{ if(state.month>1){state.month--;render();} });
+  if(btnNext) btnNext.addEventListener("click",()=>{ if(state.month<12){state.month++;render();} });
+  if(selMonth) selMonth.addEventListener("change",function(){ state.month=+this.value; render(); });
+
+  document.querySelectorAll(".btn-toggle").forEach(btn=>btn.addEventListener("click",()=>{
+    const id=btn.dataset.id;
+    state.companies=state.companies.map(c=>c.id===id?{...c,visible:!c.visible}:c);
+    save(); render();
+  }));
+  document.querySelectorAll(".btn-remove").forEach(btn=>btn.addEventListener("click",()=>{
+    const id=btn.dataset.id;
+    state.companies=state.companies.filter(c=>c.id!==id);
+    save(); render();
+  }));
+}
+
+load();
+render();
+window.addEventListener("resize", render);
+</script>
 </body>
 </html>
