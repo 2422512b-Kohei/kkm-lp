@@ -126,7 +126,18 @@ function init() {
 // ============================================================
 //  解析ロジック
 // ============================================================
+// 全角 → 半角（数字・記号・空白）に正規化
+function normalize(s) {
+  return String(s)
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)) // 全角数字
+    .replace(/／/g, "/")          // 全角スラッシュ
+    .replace(/[〜～]/g, "~")       // 波ダッシュ / 全角チルダ
+    .replace(/[－ー―–—]/g, "-")   // 各種ハイフン・長音
+    .replace(/　/g, " ");         // 全角スペース
+}
+
 function parseDates(text) {
+  text = normalize(text);
   const results = [];
   const seen = new Set();
   const push = (m, d) => {
@@ -136,13 +147,38 @@ function parseDates(text) {
     if (seen.has(k)) return;
     seen.add(k); results.push({ month: m, day: d });
   };
-  const jpRe = /(\d{1,2})\s*月\s*(\d{1,2})\s*日/g;
-  let m;
-  while ((m = jpRe.exec(text))) push(m[1], m[2]);
-  const slashRe = /\b(\d{1,2})\/(\d{1,2})\b/g;
-  while ((m = slashRe.exec(text))) {
-    if (+m[1] >= 1 && +m[1] <= 12) push(m[1], m[2]);
-  }
+  // 範囲を1日ずつ展開（m1/d1 〜 m2/d2）
+  const pushRange = (m1, d1, m2, d2) => {
+    if (m1 < 1 || m1 > 12 || m2 < 1 || m2 > 12) return;
+    const start = new Date(YEAR, m1 - 1, d1);
+    const end = new Date(YEAR, m2 - 1, d2);
+    if (isNaN(start) || isNaN(end) || end < start) return;
+    let guard = 0;
+    for (let dt = new Date(start); dt <= end && guard < 400; dt.setDate(dt.getDate() + 1), guard++) {
+      push(dt.getMonth() + 1, dt.getDate());
+    }
+  };
+
+  // 先に「範囲」を処理し、消費した箇所は空白に置換して二重カウントを防ぐ
+  // 1) 月またぎ: 7/30~8/2
+  text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})\/(\d{1,2})/g,
+    (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
+  // 2) 月またぎ（和式）: 7月30日~8月2日
+  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g,
+    (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
+  // 3) 同月: 7/24~26
+  text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})/g,
+    (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
+  // 4) 同月（和式）: 7月24日~26日 / 7月24~26日
+  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*日?/g,
+    (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
+  // 5) 単独（和式）: 7月21日
+  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g,
+    (_, a, b) => { push(+a, +b); return " "; });
+  // 6) 単独（スラッシュ）: 8/4
+  text = text.replace(/(\d{1,2})\/(\d{1,2})/g,
+    (_, a, b) => { push(+a, +b); return " "; });
+
   results.sort((a,b) => a.month - b.month || a.day - b.day);
   return results;
 }
@@ -259,8 +295,8 @@ function renderInputForm() {
           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
       </div>
       <div>
-        <label class="block text-xs font-semibold text-slate-500 mb-1">日程テキスト（コピペでOK）</label>
-        <textarea id="inp-text" rows="6" placeholder="例:&#10;関西電力 全6日程&#10;第1回:7月21日(火)、第2回:8月4日(火)&#10;&#10;または&#10;A社 8/4, 8/5, 9/1"
+        <label class="block text-xs font-semibold text-slate-500 mb-1">日程テキスト（コピペでも手入力でもOK・全角/半角どちらも可）</label>
+        <textarea id="inp-text" rows="6" placeholder="例:&#10;関西電力 7/21、8/4&#10;7/24~26（範囲もOK→24・25・26）&#10;7月30日〜8月2日&#10;A社 8/4, 8/5, 9/1"
           class="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">${e(state.inputText)}</textarea>
       </div>
       <div id="form-dynamic" class="space-y-3">${renderFormDynamic()}</div>
