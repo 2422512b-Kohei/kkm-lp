@@ -29,7 +29,12 @@
 //  定数
 // ============================================================
 const YEAR = 2026;
-const STORAGE_KEY = "intern-schedule-overlap:companies:v1";
+const STORAGE_PREFIX = "intern-schedule-overlap:companies:v1:"; // + プロフィール名
+const PROFILES_KEY   = "intern-schedule-overlap:profiles";       // 既知のプロフィール一覧
+const LAST_PROFILE_KEY = "intern-schedule-overlap:lastProfile";  // 最後に使った人
+const OLD_KEY = "intern-schedule-overlap:companies:v1";           // 旧（単一）データの移行用
+const DEFAULT_PROFILE = "ゲスト";
+
 const COLORS = [
   { name:"ブルー",     bg:"#dbeafe", text:"#1e40af", accent:"#3b82f6" },
   { name:"グリーン",   bg:"#dcfce7", text:"#166534", accent:"#22c55e" },
@@ -47,24 +52,75 @@ const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 //  状態
 // ============================================================
 let state = {
-  companies: [],
+  profile: "",      // 現在の「使う人」
+  profiles: [],     // 既知の人一覧
+  companies: [],    // 現在の人のデータ
   month: 6,
   inputName: "",
   inputText: "",
 };
 
-function load() {
+// ---- 永続化（プロフィール別） ----
+function loadProfilesList() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) state.companies = parsed;
-    }
-  } catch(e) {}
+    const p = JSON.parse(localStorage.getItem(PROFILES_KEY) || "[]");
+    return Array.isArray(p) ? p : [];
+  } catch(e) { return []; }
+}
+function saveProfilesList() {
+  try { localStorage.setItem(PROFILES_KEY, JSON.stringify(state.profiles)); } catch(e) {}
+}
+function loadCompaniesFor(profile) {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + profile);
+    const p = raw ? JSON.parse(raw) : [];
+    return Array.isArray(p) ? p : [];
+  } catch(e) { return []; }
+}
+function save() {
+  try { localStorage.setItem(STORAGE_PREFIX + state.profile, JSON.stringify(state.companies)); } catch(e) {}
 }
 
-function save() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.companies)); } catch(e) {}
+// 「使う人」を切り替える（なければ作成）。データもその人のものを読み込む。
+function setProfile(name) {
+  name = (name || "").trim();
+  if (!name) return;
+  state.profile = name;
+  if (!state.profiles.includes(name)) {
+    state.profiles.push(name);
+    saveProfilesList();
+  }
+  try { localStorage.setItem(LAST_PROFILE_KEY, name); } catch(e) {}
+  state.companies = loadCompaniesFor(name);
+  // 入力欄はクリア
+  state.inputName = ""; state.inputText = ""; state.month = 6;
+}
+
+// 「使う人」を削除（その人のデータも消す）
+function deleteProfile(name) {
+  state.profiles = state.profiles.filter(p => p !== name);
+  saveProfilesList();
+  try { localStorage.removeItem(STORAGE_PREFIX + name); } catch(e) {}
+  const next = state.profiles[0] || DEFAULT_PROFILE;
+  setProfile(next);
+}
+
+function init() {
+  state.profiles = loadProfilesList();
+  // 旧データ（単一）があれば「ゲスト」に移行
+  try {
+    const old = localStorage.getItem(OLD_KEY);
+    if (old && state.profiles.length === 0) {
+      localStorage.setItem(STORAGE_PREFIX + DEFAULT_PROFILE, old);
+      state.profiles = [DEFAULT_PROFILE];
+      saveProfilesList();
+      localStorage.removeItem(OLD_KEY);
+    }
+  } catch(e) {}
+  let last = "";
+  try { last = localStorage.getItem(LAST_PROFILE_KEY) || ""; } catch(e) {}
+  if (!last) last = state.profiles[0] || DEFAULT_PROFILE;
+  setProfile(last);
 }
 
 // ============================================================
@@ -80,11 +136,9 @@ function parseDates(text) {
     if (seen.has(k)) return;
     seen.add(k); results.push({ month: m, day: d });
   };
-  // ◯月◯日
   const jpRe = /(\d{1,2})\s*月\s*(\d{1,2})\s*日/g;
   let m;
   while ((m = jpRe.exec(text))) push(m[1], m[2]);
-  // ◯/◯（年4桁を誤って取らないよう ≤12 のみ）
   const slashRe = /\b(\d{1,2})\/(\d{1,2})\b/g;
   while ((m = slashRe.exec(text))) {
     if (+m[1] >= 1 && +m[1] <= 12) push(m[1], m[2]);
@@ -110,13 +164,41 @@ function uid() {
     : Date.now() + "-" + Math.random().toString(36).slice(2);
 }
 
-// ============================================================
-//  レンダリング（innerHTML テンプレート）
-// ============================================================
 function e(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
+// ============================================================
+//  「使う人」バー
+// ============================================================
+function renderProfileBar() {
+  const opts = state.profiles.map(p =>
+    `<option value="${e(p)}" ${p===state.profile?"selected":""}>${e(p)}</option>`
+  ).join("");
+  return `
+  <div class="border-b border-slate-200 bg-white">
+    <div class="mx-auto max-w-7xl px-5 py-2.5 flex flex-wrap items-center gap-2">
+      <span class="text-xs font-bold text-slate-500">👤 使う人</span>
+      ${state.profiles.length > 1
+        ? `<select id="sel-profile" class="rounded-lg border border-slate-200 px-2 py-1 text-sm font-bold text-indigo-700 outline-none">${opts}</select>`
+        : `<span class="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700">${e(state.profile)}</span>`
+      }
+      ${state.profiles.length > 1
+        ? `<button id="btn-del-profile" class="text-xs text-slate-400 hover:text-red-600" title="この人を削除">削除</button>`
+        : ""
+      }
+      <div class="flex items-center gap-1.5 ml-auto">
+        <input id="inp-profile" type="text" placeholder="名前 / 合言葉" autocomplete="off"
+          class="w-36 rounded-lg border border-slate-300 px-2.5 py-1 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+        <button id="btn-switch" class="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-bold text-white hover:bg-indigo-700">切替 / 新規</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ============================================================
+//  ヘッダー
+// ============================================================
 function renderHeader() {
   const vis = state.companies.filter(c=>c.visible);
   const map = new Map();
@@ -134,24 +216,36 @@ function renderHeader() {
       <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-xl text-white">📅</div>
       <div>
         <h1 class="text-lg font-black text-slate-900">インターン日程かぶりチェッカー</h1>
-        <p class="text-xs text-slate-500">候補日程を貼り付けて ${YEAR} 年の重複を一目で確認</p>
+        <p class="text-xs text-slate-500">${e(state.profile)} さんの予定 ・ ${YEAR}年の重複を一目で確認</p>
       </div>
       <div class="ml-auto">${badge}</div>
     </div>
   </header>`;
 }
 
-function renderInputForm() {
+// ============================================================
+//  入力フォーム（動的部分は #form-dynamic に分離してフォーカス維持）
+// ============================================================
+function renderFormDynamic() {
   const preview = parseDates(state.inputText);
   const ename = e(state.inputName.trim() || guessName(state.inputText));
   const previewHtml = state.inputText.trim() === "" ? "" : `
-    <div class="rounded-lg bg-slate-50 p-3 mt-2">
+    <div class="rounded-lg bg-slate-50 p-3">
       <div class="text-xs font-semibold text-slate-500 mb-1.5">✨ 抽出プレビュー${ename ? ` <span class="text-indigo-600">／ ${ename}</span>` : ""}</div>
       ${preview.length === 0
         ? `<p class="text-xs text-slate-400">日付が見つかりません（「7月21日」や「8/4」の形式で入力してください）</p>`
         : preview.map(d=>`<span class="date-chip">${d.month}/${d.day}</span>`).join("")
       }
     </div>`;
+  return `
+    ${previewHtml}
+    <button id="btn-add" ${preview.length===0?"disabled":""}
+      class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 transition">
+      ＋ カレンダーに追加${preview.length>0?`（${preview.length}件）`:""}
+    </button>`;
+}
+
+function renderInputForm() {
   return `
   <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div class="flex items-center gap-2 mb-4">
@@ -166,18 +260,17 @@ function renderInputForm() {
       </div>
       <div>
         <label class="block text-xs font-semibold text-slate-500 mb-1">日程テキスト（コピペでOK）</label>
-        <textarea id="inp-text" rows="6" placeholder="例:\n関西電力 全6日程\n第1回:7月21日(火)、第2回:8月4日(火)\n\nまたは\nA社 8/4, 8/5, 9/1"
+        <textarea id="inp-text" rows="6" placeholder="例:&#10;関西電力 全6日程&#10;第1回:7月21日(火)、第2回:8月4日(火)&#10;&#10;または&#10;A社 8/4, 8/5, 9/1"
           class="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">${e(state.inputText)}</textarea>
       </div>
-      ${previewHtml}
-      <button id="btn-add" ${preview.length===0?"disabled":""}
-        class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 transition">
-        ＋ カレンダーに追加${preview.length>0?`（${preview.length}件）`:""}
-      </button>
+      <div id="form-dynamic" class="space-y-3">${renderFormDynamic()}</div>
     </div>
   </div>`;
 }
 
+// ============================================================
+//  サイドバー
+// ============================================================
 function renderSidebar() {
   const cs = state.companies;
   const list = cs.length === 0
@@ -214,13 +307,15 @@ function renderSidebar() {
   </div>`;
 }
 
+// ============================================================
+//  カレンダー
+// ============================================================
 function renderCalendar() {
   const vis = state.companies.filter(c=>c.visible);
   const y = YEAR, mo = state.month;
   const firstDay = new Date(y, mo-1, 1).getDay();
   const daysInMonth = new Date(y, mo, 0).getDate();
 
-  // 月ごとの重複数
   let conflictCount = 0;
   const cells = [];
   for (let i=0; i<firstDay; i++) cells.push(null);
@@ -236,8 +331,6 @@ function renderCalendar() {
   const conflictBadge = conflictCount > 0
     ? `<span class="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">⚠️ この月 ${conflictCount} 日の重複</span>`
     : "";
-
-  // 月セレクター
   const monthOpts = MONTHS.map(m => `<option value="${m}" ${m===mo?"selected":""}>${m}月</option>`).join("");
 
   const cellsHtml = cells.map((cell, idx) => {
@@ -246,8 +339,7 @@ function renderCalendar() {
     const evts = cell.events;
     const cellClass = evts.length >= 3 ? "cell-conflict3" : evts.length >= 2 ? "cell-conflict2" : "cell-normal";
     const dayColor = wd===0 ? "color:#ef4444" : wd===6 ? "color:#3b82f6" : "color:#64748b";
-    const badge = evts.length >= 2
-      ? `<span class="badge-conflict">⚠️ ${evts.length}社</span>` : "";
+    const badge = evts.length >= 2 ? `<span class="badge-conflict">⚠️ ${evts.length}社</span>` : "";
     const tags = evts.map(ev =>
       `<div class="truncate rounded px-1.5 py-0.5 text-[11px] font-semibold" style="background:${ev.bg};color:${ev.text}" title="${e(ev.name)}">${e(ev.name)}</div>`
     ).join("");
@@ -303,6 +395,7 @@ function svgTrash() {
 // ============================================================
 function render() {
   document.getElementById("app").innerHTML = `
+    ${renderProfileBar()}
     ${renderHeader()}
     <div class="mx-auto max-w-7xl px-5 py-5">
       <div class="grid grid-cols-1 gap-5 lg:grid-cols-[340px_1fr]">
@@ -318,16 +411,15 @@ function render() {
   bindEvents();
 }
 
-function bindEvents() {
-  // 入力フィールド
-  document.getElementById("inp-name").addEventListener("input", function() {
-    state.inputName = this.value; render();
-  });
-  document.getElementById("inp-text").addEventListener("input", function() {
-    state.inputText = this.value; render();
-  });
+// 入力フォームの動的部分（プレビュー＋追加ボタン）だけ更新 → textareaのフォーカス維持
+function updateFormDynamic() {
+  const box = document.getElementById("form-dynamic");
+  if (!box) return;
+  box.innerHTML = renderFormDynamic();
+  bindAddButton();
+}
 
-  // 追加ボタン
+function bindAddButton() {
   const btnAdd = document.getElementById("btn-add");
   if (btnAdd) btnAdd.addEventListener("click", function() {
     const dates = parseDates(state.inputText);
@@ -339,19 +431,50 @@ function bindEvents() {
     state.inputName = ""; state.inputText = "";
     save(); render();
   });
+}
 
-  // 月切替
-  document.getElementById("btn-prev").addEventListener("click", () => {
-    if (state.month > 1) { state.month--; render(); }
+function bindEvents() {
+  // --- 使う人バー ---
+  const selProfile = document.getElementById("sel-profile");
+  if (selProfile) selProfile.addEventListener("change", function() {
+    setProfile(this.value); render();
   });
-  document.getElementById("btn-next").addEventListener("click", () => {
-    if (state.month < 12) { state.month++; render(); }
+  const btnSwitch = document.getElementById("btn-switch");
+  const inpProfile = document.getElementById("inp-profile");
+  if (btnSwitch) btnSwitch.addEventListener("click", () => {
+    if (inpProfile && inpProfile.value.trim()) { setProfile(inpProfile.value); render(); }
   });
-  document.getElementById("sel-month").addEventListener("change", function() {
-    state.month = +this.value; render();
+  if (inpProfile) inpProfile.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && inpProfile.value.trim()) { setProfile(inpProfile.value); render(); }
+  });
+  const btnDel = document.getElementById("btn-del-profile");
+  if (btnDel) btnDel.addEventListener("click", () => {
+    if (confirm(`「${state.profile}」さんのデータを削除しますか？（元に戻せません）`)) {
+      deleteProfile(state.profile); render();
+    }
   });
 
-  // 表示切替・削除
+  // --- 入力フィールド：全体再描画せず動的部分だけ更新 ---
+  const inpName = document.getElementById("inp-name");
+  const inpText = document.getElementById("inp-text");
+  if (inpName) inpName.addEventListener("input", function() {
+    state.inputName = this.value; updateFormDynamic();
+  });
+  if (inpText) inpText.addEventListener("input", function() {
+    state.inputText = this.value; updateFormDynamic();
+  });
+
+  bindAddButton();
+
+  // --- 月切替 ---
+  const btnPrev = document.getElementById("btn-prev");
+  const btnNext = document.getElementById("btn-next");
+  const selMonth = document.getElementById("sel-month");
+  if (btnPrev) btnPrev.addEventListener("click", () => { if (state.month > 1) { state.month--; render(); } });
+  if (btnNext) btnNext.addEventListener("click", () => { if (state.month < 12) { state.month++; render(); } });
+  if (selMonth) selMonth.addEventListener("change", function() { state.month = +this.value; render(); });
+
+  // --- 表示切替・削除 ---
   document.querySelectorAll(".btn-toggle").forEach(btn => {
     btn.addEventListener("click", () => {
       const id = btn.dataset.id;
@@ -371,7 +494,7 @@ function bindEvents() {
 // ============================================================
 //  起動
 // ============================================================
-load();
+init();
 render();
 </script>
 </body>
