@@ -8,7 +8,9 @@
   <meta http-equiv="Expires" content="0" />
   <title>インターン日程かぶりチェッカー</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <style>
     body { background:#f8fafc; color:#0f172a; font-family:system-ui,-apple-system,sans-serif; }
     .company-tag { display:inline-block; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:600; margin:1px; }
@@ -27,12 +29,14 @@
 
 <script>
 // ============================================================
-//  定数
+//  Firebase 設定（取得後にここへ貼り付けると初期設定画面なしで使えます）
+//  例: const FIREBASE_CONFIG = { apiKey:"...", authDomain:"...", projectId:"...", ... };
 // ============================================================
+const FIREBASE_CONFIG = null;
+
 const YEAR = 2026;
-const CFG_URL_KEY = "ic:supabaseUrl";
-const CFG_KEY_KEY = "ic:supabaseAnonKey";
-const CACHE_PREFIX = "ic:cache:";   // + user.id （オフライン表示用キャッシュ）
+const CFG_KEY = "ic:fbConfig";
+const CACHE_PREFIX = "ic:cache:";
 
 const COLORS = [
   { name:"ブルー",     bg:"#dbeafe", text:"#1e40af", accent:"#3b82f6" },
@@ -47,128 +51,93 @@ const COLORS = [
 const WEEKDAYS = ["日","月","火","水","木","金","土"];
 const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 
-// ============================================================
-//  状態
-// ============================================================
-let supa = null;        // Supabase クライアント
-let session = null;     // ログインセッション
-let saveTimer = null;   // クラウド保存のデバウンス
+let fbApp = null, auth = null, db = null, user = null, saveTimer = null;
 
 let state = {
-  view: "loading",      // loading | config | auth | app
+  view: "loading",   // loading | config | auth | app
   companies: [],
   month: 6,
   inputName: "",
   inputText: "",
-  sync: "",             // 同期ステータス表示
-  authMode: "login",    // login | signup
+  sync: "",
   authMsg: "",
 };
 
-// ---- 設定（接続情報） ----
+// ---- 設定（Firebase config） ----
 function getConfig() {
-  try {
-    return {
-      url: localStorage.getItem(CFG_URL_KEY) || "",
-      key: localStorage.getItem(CFG_KEY_KEY) || "",
-    };
-  } catch(e) { return { url:"", key:"" }; }
+  if (FIREBASE_CONFIG) return FIREBASE_CONFIG;
+  try { const raw = localStorage.getItem(CFG_KEY); return raw ? JSON.parse(raw) : null; } catch(e) { return null; }
 }
-function setConfig(url, key) {
-  try {
-    localStorage.setItem(CFG_URL_KEY, url.trim());
-    localStorage.setItem(CFG_KEY_KEY, key.trim());
-  } catch(e) {}
+function parseConfig(text) {
+  const m = String(text).match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try { return Function("return (" + m[0] + ")")(); }
+  catch(e) { try { return JSON.parse(m[0]); } catch(e2) { return null; } }
 }
 
-// ---- オフライン用ローカルキャッシュ ----
+// ---- オフライン用キャッシュ ----
 function cacheLocal() {
-  if (!session) return;
-  try { localStorage.setItem(CACHE_PREFIX + session.user.id, JSON.stringify(state.companies)); } catch(e) {}
+  if (!user) return;
+  try { localStorage.setItem(CACHE_PREFIX + user.uid, JSON.stringify(state.companies)); } catch(e) {}
 }
 function loadCache() {
-  if (!session) return [];
-  try {
-    const raw = localStorage.getItem(CACHE_PREFIX + session.user.id);
-    const p = raw ? JSON.parse(raw) : [];
-    return Array.isArray(p) ? p : [];
-  } catch(e) { return []; }
+  if (!user) return [];
+  try { const raw = localStorage.getItem(CACHE_PREFIX + user.uid); const p = raw ? JSON.parse(raw) : []; return Array.isArray(p) ? p : []; } catch(e) { return []; }
 }
 
-// ============================================================
-//  起動・認証
-// ============================================================
-// Promise にタイムアウトを付ける（ネットワーク待ちで固まらないように）
+// ---- 補助 ----
 function withTimeout(p, ms) {
-  return Promise.race([
-    Promise.resolve(p),
-    new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms)),
-  ]);
+  return Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
 }
-// Supabase ライブラリ(UMD)が読み込まれるまで待つ
-function waitForSupabase(maxMs) {
+function waitForFirebase(maxMs) {
   return new Promise(resolve => {
     const t0 = Date.now();
     (function check() {
-      if (typeof supabase !== "undefined" && supabase.createClient) return resolve(true);
+      if (typeof firebase !== "undefined" && firebase.initializeApp && firebase.auth && firebase.firestore) return resolve(true);
       if (Date.now() - t0 > maxMs) return resolve(false);
       setTimeout(check, 100);
     })();
   });
 }
 
+// ============================================================
+//  起動・認証
+// ============================================================
 async function boot() {
   try {
-    const { url, key } = getConfig();
-    if (!url || !key) { state.view = "config"; render(); return; }
-
-    const ready = await waitForSupabase(8000);
-    if (!ready) {
-      state.view = "config";
-      state.authMsg = "Supabase ライブラリの読み込みに失敗しました。通信環境を確認して再読込してください。";
-      render(); return;
+    const cfg = getConfig();
+    if (!cfg) { state.view = "config"; render(); return; }
+    const ready = await waitForFirebase(8000);
+    if (!ready) { state.view = "config"; state.authMsg = "Firebase ライブラリの読み込みに失敗しました。通信環境を確認して再読込してください。"; render(); return; }
+    if (!fbApp) {
+      fbApp = firebase.initializeApp(cfg);
+      auth = firebase.auth();
+      db = firebase.firestore();
     }
-
-    supa = supabase.createClient(url, key);
-
-    try {
-      const { data } = await withTimeout(supa.auth.getSession(), 8000);
-      session = data ? data.session : null;
-    } catch(e) {
-      session = null; // 取得失敗・タイムアウトでも先へ進む（ログイン画面へ）
-    }
-
-    try {
-      supa.auth.onAuthStateChange((_event, s) => { session = s; afterAuth(); });
-    } catch(e) {}
-
-    await afterAuth();
+    try { await auth.getRedirectResult(); } catch(e) {}
+    auth.onAuthStateChanged(u => { user = u; afterAuth(); });
   } catch(err) {
-    // 何があっても「読み込み中」で固まらせない
     state.view = "config";
-    state.authMsg = "初期化エラー: " + (err && err.message ? err.message : String(err)) + "（接続情報を確認してください）";
+    state.authMsg = "初期化エラー: " + (err && err.message ? err.message : String(err)) + "（設定を確認してください）";
     render();
   }
 }
 
 async function afterAuth() {
-  if (!session) { state.view = "auth"; render(); return; }
+  if (!user) { state.view = "auth"; state.authMsg = ""; render(); return; }
   state.view = "app";
-  state.companies = loadCache();   // まずキャッシュを表示
+  state.companies = loadCache();
   render();
-  await loadCloud();               // クラウドから最新を取得
+  await loadCloud();
 }
 
 async function loadCloud() {
-  if (!supa || !session) return;
+  if (!db || !user) return;
   setSync("読込中…");
   try {
-    const { data, error } = await withTimeout(
-      supa.from("schedules").select("data").eq("user_id", session.user.id).maybeSingle(),
-      10000
-    );
-    if (error) throw error;
-    state.companies = (data && Array.isArray(data.data)) ? data.data : [];
+    const doc = await withTimeout(db.collection("schedules").doc(user.uid).get(), 10000);
+    const d = doc && doc.exists ? doc.data() : null;
+    state.companies = (d && Array.isArray(d.data)) ? d.data : [];
     cacheLocal();
     setSync("☁️ 同期済み");
     render();
@@ -183,51 +152,40 @@ function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(saveCloud, 500);
 }
-
 async function saveCloud() {
-  if (!supa || !session) return;
+  if (!db || !user) return;
   try {
-    const { error } = await withTimeout(supa.from("schedules").upsert(
-      { user_id: session.user.id, data: state.companies, updated_at: new Date().toISOString() },
-      { onConflict: "user_id" }
-    ), 10000);
-    if (error) throw error;
+    await withTimeout(db.collection("schedules").doc(user.uid).set({ data: state.companies, updatedAt: Date.now() }), 10000);
     setSync("☁️ 同期済み");
   } catch(e) {
     setSync("⚠️ 保存失敗（オフライン？）");
   }
 }
-
 function setSync(msg) {
   state.sync = msg;
   const el = document.getElementById("sync-badge");
   if (el) el.textContent = msg;
 }
 
-async function doAuth() {
-  const email = (document.getElementById("auth-email") || {}).value || "";
-  const pw = (document.getElementById("auth-pw") || {}).value || "";
-  if (!email.trim() || !pw) { state.authMsg = "メールとパスワードを入力してください。"; render(); return; }
-  state.authMsg = "処理中…"; render();
+async function doGoogleLogin() {
+  state.authMsg = "ログイン中…"; render();
   try {
-    if (state.authMode === "signup") {
-      const { data, error } = await supa.auth.signUp({ email: email.trim(), password: pw });
-      if (error) throw error;
-      if (data.session) { /* 即ログイン（メール確認OFFの場合） */ }
-      else { state.authMsg = "確認メールを送信しました。メール内のリンクを開いてから、ログインしてください。"; state.authMode = "login"; render(); }
-    } else {
-      const { error } = await supa.auth.signInWithPassword({ email: email.trim(), password: pw });
-      if (error) throw error;
-    }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
   } catch(e) {
-    state.authMsg = "エラー: " + (e && e.message ? e.message : "失敗しました");
-    render();
+    const code = e && e.code ? e.code : "";
+    if (code === "auth/popup-blocked" || code === "auth/cancelled-popup-request" || code === "auth/popup-closed-by-user") {
+      try { await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()); return; }
+      catch(e2) { state.authMsg = "エラー: " + (e2.message || e2); render(); }
+    } else {
+      state.authMsg = "エラー: " + (e && e.message ? e.message : "ログインに失敗しました");
+      render();
+    }
   }
 }
-
 async function doLogout() {
-  try { await supa.auth.signOut(); } catch(e) {}
-  session = null; state.view = "auth"; render();
+  try { await auth.signOut(); } catch(e) {}
+  user = null; state.view = "auth"; render();
 }
 
 // ============================================================
@@ -241,113 +199,83 @@ function normalize(s) {
     .replace(/[－ー―–—]/g, "-")
     .replace(/　/g, " ");
 }
-
 function parseDates(text) {
   text = normalize(text);
-  const results = [];
-  const seen = new Set();
+  const results = [], seen = new Set();
   const push = (m, d) => {
     m = +m; d = +d;
     if (!m || !d || m < 1 || m > 12 || d < 1 || d > 31) return;
-    const k = m + "-" + d;
-    if (seen.has(k)) return;
+    const k = m + "-" + d; if (seen.has(k)) return;
     seen.add(k); results.push({ month: m, day: d });
   };
   const pushRange = (m1, d1, m2, d2) => {
     if (m1 < 1 || m1 > 12 || m2 < 1 || m2 > 12) return;
-    const start = new Date(YEAR, m1 - 1, d1);
-    const end = new Date(YEAR, m2 - 1, d2);
+    const start = new Date(YEAR, m1 - 1, d1), end = new Date(YEAR, m2 - 1, d2);
     if (isNaN(start) || isNaN(end) || end < start) return;
     let guard = 0;
-    for (let dt = new Date(start); dt <= end && guard < 400; dt.setDate(dt.getDate() + 1), guard++) {
-      push(dt.getMonth() + 1, dt.getDate());
-    }
+    for (let dt = new Date(start); dt <= end && guard < 400; dt.setDate(dt.getDate() + 1), guard++) push(dt.getMonth() + 1, dt.getDate());
   };
-  text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})\/(\d{1,2})/g,
-    (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
-  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g,
-    (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
-  text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})/g,
-    (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
-  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*日?/g,
-    (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
-  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g,
-    (_, a, b) => { push(+a, +b); return " "; });
-  text = text.replace(/(\d{1,2})\/(\d{1,2})/g,
-    (_, a, b) => { push(+a, +b); return " "; });
-  results.sort((a,b) => a.month - b.month || a.day - b.day);
+  text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})\/(\d{1,2})/g, (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
+  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g, (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
+  text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})/g, (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
+  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*日?/g, (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
+  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g, (_, a, b) => { push(+a, +b); return " "; });
+  text = text.replace(/(\d{1,2})\/(\d{1,2})/g, (_, a, b) => { push(+a, +b); return " "; });
+  results.sort((a, b) => a.month - b.month || a.day - b.day);
   return results;
 }
-
 function guessName(text) {
-  const line = text.split(/\r?\n/).map(l=>l.trim()).find(l=>l.length>0) || "";
+  const line = text.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 0) || "";
   const before = line.split(/(\d{1,2}\s*月|\d{1,2}\s*\/)/)[0].trim();
-  return (before || line).replace(/[、,：:].*/,"").trim();
+  return (before || line).replace(/[、,：:].*/, "").trim();
 }
-
-function pickColor(used) {
-  const unused = COLORS.find(c => !used.includes(c.name));
-  return unused || COLORS[used.length % COLORS.length];
-}
-function uid() {
-  return (typeof crypto !== "undefined" && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : Date.now() + "-" + Math.random().toString(36).slice(2);
-}
-function e(s) {
-  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
+function pickColor(used) { return COLORS.find(c => !used.includes(c.name)) || COLORS[used.length % COLORS.length]; }
+function uid() { return (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2); }
+function e(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 // ============================================================
-//  画面：接続設定
+//  画面：初期設定（Firebase）
 // ============================================================
 function renderConfig() {
-  const { url, key } = getConfig();
+  let cur = "";
+  try { cur = localStorage.getItem(CFG_KEY) || ""; } catch(e) {}
   return `
   <div class="min-h-screen flex items-center justify-center px-4">
     <div class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h1 class="text-lg font-black text-slate-900 mb-1">初期設定（最初の1回だけ）</h1>
-      <p class="text-xs text-slate-500 mb-3">⚠️ ここは<b>ログイン画面ではありません</b>。データ保管庫「Supabase」を作ると発行される2つの値を貼る画面です。メール／パスワードは次の画面で使います。</p>
+      <p class="text-xs text-slate-500 mb-3">⚠️ ここは<b>ログイン画面ではありません</b>。Firebase で発行される <b>firebaseConfig</b>（apiKey などの設定のかたまり）をまるごと貼り付けてください。Google ログインは次の画面です。</p>
       ${state.authMsg ? `<p class="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">${e(state.authMsg)}</p>` : ""}
-      <label class="block text-xs font-semibold text-slate-500 mb-1">Project URL（例: https://abcd1234.supabase.co）</label>
-      <input id="cfg-url" type="text" value="${e(url)}" placeholder="https://xxxx.supabase.co"
-        class="w-full mb-3 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-      <label class="block text-xs font-semibold text-slate-500 mb-1">anon public key（eyJ… で始まる長い文字列）</label>
-      <textarea id="cfg-key" rows="3" placeholder="eyJhbGciOi..."
-        class="w-full mb-4 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500">${e(key)}</textarea>
+      <label class="block text-xs font-semibold text-slate-500 mb-1">firebaseConfig（{ ... } をまるごと）</label>
+      <textarea id="cfg-json" rows="9" placeholder='{
+  "apiKey": "AIza...",
+  "authDomain": "xxxx.firebaseapp.com",
+  "projectId": "xxxx",
+  "appId": "1:...:web:..."
+}'
+        class="w-full mb-4 rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono outline-none focus:border-indigo-500">${e(cur)}</textarea>
       <button id="cfg-save" class="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">保存して続ける</button>
     </div>
   </div>`;
 }
 
 // ============================================================
-//  画面：ログイン
+//  画面：ログイン（Google）
 // ============================================================
 function renderAuth() {
-  const isSignup = state.authMode === "signup";
   return `
   <div class="min-h-screen flex items-center justify-center px-4">
-    <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div class="flex items-center gap-2 mb-4">
+    <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-center">
+      <div class="flex items-center justify-center gap-2 mb-4">
         <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-xl text-white">📅</div>
         <h1 class="text-base font-black text-slate-900">インターン日程かぶりチェッカー</h1>
       </div>
-      <p class="text-sm font-bold text-slate-700 mb-3">${isSignup ? "新規登録" : "ログイン"}</p>
+      <p class="text-sm text-slate-600 mb-5">Google アカウントでログインすると、<br>どの端末でも同じデータが使えます。</p>
       ${state.authMsg ? `<p class="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">${e(state.authMsg)}</p>` : ""}
-      <label class="block text-xs font-semibold text-slate-500 mb-1">メールアドレス</label>
-      <input id="auth-email" type="email" autocomplete="username" placeholder="you@example.com"
-        class="w-full mb-3 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-      <label class="block text-xs font-semibold text-slate-500 mb-1">パスワード</label>
-      <input id="auth-pw" type="password" autocomplete="${isSignup?"new-password":"current-password"}" placeholder="6文字以上"
-        class="w-full mb-4 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-      <button id="auth-go" class="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 mb-3">
-        ${isSignup ? "登録する" : "ログイン"}
+      <button id="btn-google" class="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 34.9 26.7 35 24 35c-5.3 0-9.7-2.6-11.3-7l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.1 5.6l6.2 5.2C39.9 36.3 44 30.7 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+        Google でログイン
       </button>
-      <p class="text-center text-xs text-slate-500">
-        ${isSignup ? "すでにアカウントがある →" : "はじめての方は →"}
-        <button id="auth-toggle" class="font-bold text-indigo-600 hover:underline">${isSignup ? "ログイン" : "新規登録"}</button>
-      </p>
-      <p class="mt-4 text-center"><button id="cfg-open" class="text-[11px] text-slate-400 hover:underline">接続設定を変更</button></p>
+      <p class="mt-4"><button id="cfg-open" class="text-[11px] text-slate-400 hover:underline">接続設定を変更</button></p>
     </div>
   </div>`;
 }
@@ -356,11 +284,12 @@ function renderAuth() {
 //  画面：アプリ本体
 // ============================================================
 function renderAccountBar() {
-  const email = session && session.user ? session.user.email : "";
+  const name = user ? (user.displayName || user.email || "ログイン中") : "";
+  const photo = user && user.photoURL ? `<img src="${e(user.photoURL)}" alt="" class="h-6 w-6 rounded-full" referrerpolicy="no-referrer">` : "👤";
   return `
   <div class="border-b border-slate-200 bg-white">
     <div class="mx-auto max-w-7xl px-5 py-2.5 flex flex-wrap items-center gap-2">
-      <span class="text-xs font-bold text-slate-500">👤 ${e(email)}</span>
+      <span class="flex items-center gap-1.5 text-xs font-bold text-slate-600">${photo} ${e(name)}</span>
       <span id="sync-badge" class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">${e(state.sync)}</span>
       <div class="ml-auto flex items-center gap-2">
         <button id="btn-reload" class="text-xs text-slate-400 hover:text-indigo-600">再読込</button>
@@ -369,12 +298,11 @@ function renderAccountBar() {
     </div>
   </div>`;
 }
-
 function renderHeader() {
-  const vis = state.companies.filter(c=>c.visible);
+  const vis = state.companies.filter(c => c.visible);
   const map = new Map();
-  vis.forEach(c => c.dates.forEach(d => { const k=d.month+"-"+d.day; map.set(k,(map.get(k)||0)+1); }));
-  const total = [...map.values()].filter(n=>n>=2).length;
+  vis.forEach(c => c.dates.forEach(d => { const k = d.month + "-" + d.day; map.set(k, (map.get(k) || 0) + 1); }));
+  const total = [...map.values()].filter(n => n >= 2).length;
   const badge = total > 0
     ? `<span class="flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-sm font-bold text-red-700">⚠️ 重複 ${total} 日</span>`
     : `<span class="flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-700">✅ 重複なし</span>`;
@@ -390,7 +318,6 @@ function renderHeader() {
     </div>
   </header>`;
 }
-
 function renderFormDynamic() {
   const preview = parseDates(state.inputText);
   const ename = e(state.inputName.trim() || guessName(state.inputText));
@@ -399,17 +326,15 @@ function renderFormDynamic() {
       <div class="text-xs font-semibold text-slate-500 mb-1.5">✨ 抽出プレビュー${ename ? ` <span class="text-indigo-600">／ ${ename}</span>` : ""}</div>
       ${preview.length === 0
         ? `<p class="text-xs text-slate-400">日付が見つかりません（「7月21日」や「8/4」「7/24~26」の形式で入力してください）</p>`
-        : preview.map(d=>`<span class="date-chip">${d.month}/${d.day}</span>`).join("")
-      }
+        : preview.map(d => `<span class="date-chip">${d.month}/${d.day}</span>`).join("")}
     </div>`;
   return `
     ${previewHtml}
-    <button id="btn-add" ${preview.length===0?"disabled":""}
+    <button id="btn-add" ${preview.length === 0 ? "disabled" : ""}
       class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 transition">
-      ＋ カレンダーに追加${preview.length>0?`（${preview.length}件）`:""}
+      ＋ カレンダーに追加${preview.length > 0 ? `（${preview.length}件）` : ""}
     </button>`;
 }
-
 function renderInputForm() {
   return `
   <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -432,28 +357,23 @@ function renderInputForm() {
     </div>
   </div>`;
 }
-
 function renderSidebar() {
   const cs = state.companies;
   const list = cs.length === 0
     ? `<p class="rounded-lg bg-slate-50 px-3 py-6 text-center text-xs text-slate-400">まだ企業が登録されていません。<br>左のフォームから追加してください。</p>`
     : cs.map(c => `
-      <li class="rounded-xl border border-slate-200 p-3" style="opacity:${c.visible?1:0.55}">
+      <li class="rounded-xl border border-slate-200 p-3" style="opacity:${c.visible ? 1 : 0.55}">
         <div class="flex items-center gap-2">
           <span class="h-3.5 w-3.5 rounded-full shrink-0" style="background:${c.color.accent}"></span>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-bold text-slate-800 truncate">${e(c.name)}</p>
             <p class="text-xs text-slate-400">${c.dates.length}日程</p>
           </div>
-          <button class="btn-toggle rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" data-id="${c.id}" title="${c.visible?"非表示":"表示"}">
-            ${c.visible ? svgEye() : svgEyeOff()}
-          </button>
-          <button class="btn-remove rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" data-id="${c.id}" title="削除">
-            ${svgTrash()}
-          </button>
+          <button class="btn-toggle rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" data-id="${c.id}" title="${c.visible ? "非表示" : "表示"}">${c.visible ? svgEye() : svgEyeOff()}</button>
+          <button class="btn-remove rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" data-id="${c.id}" title="削除">${svgTrash()}</button>
         </div>
         <div class="mt-2 flex flex-wrap">
-          ${c.dates.map(d=>`<span class="company-tag" style="background:${c.color.bg};color:${c.color.text}">${d.month}/${d.day}</span>`).join("")}
+          ${c.dates.map(d => `<span class="company-tag" style="background:${c.color.bg};color:${c.color.text}">${d.month}/${d.day}</span>`).join("")}
         </div>
       </li>`).join("");
   return `
@@ -468,53 +388,39 @@ function renderSidebar() {
     <ul class="space-y-2">${list}</ul>
   </div>`;
 }
-
 function renderCalendar() {
-  const vis = state.companies.filter(c=>c.visible);
+  const vis = state.companies.filter(c => c.visible);
   const y = YEAR, mo = state.month;
-  const firstDay = new Date(y, mo-1, 1).getDay();
+  const firstDay = new Date(y, mo - 1, 1).getDay();
   const daysInMonth = new Date(y, mo, 0).getDate();
   let conflictCount = 0;
   const cells = [];
-  for (let i=0; i<firstDay; i++) cells.push(null);
-  for (let d=1; d<=daysInMonth; d++) {
-    const events = vis.filter(c => c.dates.some(dt => dt.month===mo && dt.day===d))
-      .map(c => ({ name: c.name, bg: c.color.bg, text: c.color.text }));
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const events = vis.filter(c => c.dates.some(dt => dt.month === mo && dt.day === d)).map(c => ({ name: c.name, bg: c.color.bg, text: c.color.text }));
     if (events.length >= 2) conflictCount++;
     cells.push({ day: d, events });
   }
   while (cells.length % 7 !== 0) cells.push(null);
-
-  const conflictBadge = conflictCount > 0
-    ? `<span class="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">⚠️ この月 ${conflictCount} 日の重複</span>` : "";
-  const monthOpts = MONTHS.map(m => `<option value="${m}" ${m===mo?"selected":""}>${m}月</option>`).join("");
-
+  const conflictBadge = conflictCount > 0 ? `<span class="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">⚠️ この月 ${conflictCount} 日の重複</span>` : "";
+  const monthOpts = MONTHS.map(m => `<option value="${m}" ${m === mo ? "selected" : ""}>${m}月</option>`).join("");
   const cellsHtml = cells.map((cell, idx) => {
     if (!cell) return `<div class="min-h-[88px]"></div>`;
-    const wd = idx % 7;
-    const evts = cell.events;
+    const wd = idx % 7, evts = cell.events;
     const cellClass = evts.length >= 3 ? "cell-conflict3" : evts.length >= 2 ? "cell-conflict2" : "cell-normal";
-    const dayColor = wd===0 ? "color:#ef4444" : wd===6 ? "color:#3b82f6" : "color:#64748b";
+    const dayColor = wd === 0 ? "color:#ef4444" : wd === 6 ? "color:#3b82f6" : "color:#64748b";
     const badge = evts.length >= 2 ? `<span class="badge-conflict">⚠️ ${evts.length}社</span>` : "";
-    const tags = evts.map(ev =>
-      `<div class="truncate rounded px-1.5 py-0.5 text-[11px] font-semibold" style="background:${ev.bg};color:${ev.text}" title="${e(ev.name)}">${e(ev.name)}</div>`
-    ).join("");
+    const tags = evts.map(ev => `<div class="truncate rounded px-1.5 py-0.5 text-[11px] font-semibold" style="background:${ev.bg};color:${ev.text}" title="${e(ev.name)}">${e(ev.name)}</div>`).join("");
     return `
     <div class="min-h-[88px] rounded-xl p-1.5 ${cellClass}">
-      <div class="flex items-center justify-between mb-1">
-        <span class="text-xs font-bold" style="${dayColor}">${cell.day}</span>${badge}
-      </div>
+      <div class="flex items-center justify-between mb-1"><span class="text-xs font-bold" style="${dayColor}">${cell.day}</span>${badge}</div>
       <div class="space-y-0.5">${tags}</div>
     </div>`;
   }).join("");
-
   return `
   <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-      <div class="flex items-center gap-3">
-        <h2 class="text-xl font-black text-slate-800">${y}年 ${mo}月</h2>
-        ${conflictBadge}
-      </div>
+      <div class="flex items-center gap-3"><h2 class="text-xl font-black text-slate-800">${y}年 ${mo}月</h2>${conflictBadge}</div>
       <div class="flex items-center gap-1.5">
         <button id="btn-prev" class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50">◀</button>
         <select id="sel-month" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-bold text-slate-700 outline-none">${monthOpts}</select>
@@ -522,7 +428,7 @@ function renderCalendar() {
       </div>
     </div>
     <div class="grid grid-cols-7 gap-1 mb-1">
-      ${WEEKDAYS.map((w,i)=>`<div class="py-1 text-center text-xs font-bold ${i===0?"text-red-500":i===6?"text-blue-500":"text-slate-400"}">${w}</div>`).join("")}
+      ${WEEKDAYS.map((w, i) => `<div class="py-1 text-center text-xs font-bold ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-slate-400"}">${w}</div>`).join("")}
     </div>
     <div class="grid grid-cols-7 gap-1">${cellsHtml}</div>
   </div>
@@ -533,7 +439,6 @@ function renderCalendar() {
     <span class="flex items-center gap-1.5"><span class="badge-conflict">⚠️ N社</span> 重複している日</span>
   </div>`;
 }
-
 function svgEye() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`; }
 function svgEyeOff() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/></svg>`; }
 function svgTrash() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`; }
@@ -562,62 +467,51 @@ function render() {
   document.getElementById("app").innerHTML = html;
   bindEvents();
 }
-
 function updateFormDynamic() {
   const box = document.getElementById("form-dynamic");
   if (!box) return;
   box.innerHTML = renderFormDynamic();
   bindAddButton();
 }
-
 function bindAddButton() {
   const btnAdd = document.getElementById("btn-add");
   if (btnAdd) btnAdd.addEventListener("click", function() {
     const dates = parseDates(state.inputText);
     if (!dates.length) return;
     const name = state.inputName.trim() || guessName(state.inputText) || "名称未設定";
-    const color = pickColor(state.companies.map(c=>c.color.name));
+    const color = pickColor(state.companies.map(c => c.color.name));
     state.companies.push({ id: uid(), name, color, dates, visible: true, rawText: state.inputText });
     if (dates.length) state.month = dates[0].month;
     state.inputName = ""; state.inputText = "";
     scheduleSave(); render();
   });
 }
-
 function bindEvents() {
-  // 設定画面
   const cfgSave = document.getElementById("cfg-save");
   if (cfgSave) cfgSave.addEventListener("click", () => {
-    const url = (document.getElementById("cfg-url")||{}).value || "";
-    const key = (document.getElementById("cfg-key")||{}).value || "";
-    if (!url.trim() || !key.trim()) { state.authMsg = "両方の入力が必要です。"; render(); return; }
-    setConfig(url, key); state.authMsg = ""; state.view = "loading"; render(); boot();
+    const txt = (document.getElementById("cfg-json") || {}).value || "";
+    const parsed = parseConfig(txt);
+    if (!parsed || !parsed.apiKey || !parsed.projectId) { state.authMsg = "firebaseConfig を正しく貼り付けてください（apiKey と projectId が必要です）。"; render(); return; }
+    try { localStorage.setItem(CFG_KEY, JSON.stringify(parsed)); } catch(e) {}
+    state.authMsg = ""; state.view = "loading"; render(); boot();
   });
 
-  // ログイン画面
-  const authGo = document.getElementById("auth-go");
-  if (authGo) authGo.addEventListener("click", doAuth);
-  const authToggle = document.getElementById("auth-toggle");
-  if (authToggle) authToggle.addEventListener("click", () => { state.authMode = state.authMode==="login"?"signup":"login"; state.authMsg=""; render(); });
-  const authPw = document.getElementById("auth-pw");
-  if (authPw) authPw.addEventListener("keydown", ev => { if (ev.key==="Enter") doAuth(); });
+  const btnGoogle = document.getElementById("btn-google");
+  if (btnGoogle) btnGoogle.addEventListener("click", doGoogleLogin);
   const cfgOpen = document.getElementById("cfg-open");
-  if (cfgOpen) cfgOpen.addEventListener("click", () => { state.view="config"; render(); });
+  if (cfgOpen) cfgOpen.addEventListener("click", () => { state.view = "config"; render(); });
 
-  // アプリ：アカウントバー
   const btnLogout = document.getElementById("btn-logout");
   if (btnLogout) btnLogout.addEventListener("click", doLogout);
   const btnReload = document.getElementById("btn-reload");
   if (btnReload) btnReload.addEventListener("click", loadCloud);
 
-  // 入力
   const inpName = document.getElementById("inp-name");
   const inpText = document.getElementById("inp-text");
   if (inpName) inpName.addEventListener("input", function() { state.inputName = this.value; updateFormDynamic(); });
   if (inpText) inpText.addEventListener("input", function() { state.inputText = this.value; updateFormDynamic(); });
   bindAddButton();
 
-  // 月切替
   const btnPrev = document.getElementById("btn-prev");
   const btnNext = document.getElementById("btn-next");
   const selMonth = document.getElementById("sel-month");
@@ -625,15 +519,14 @@ function bindEvents() {
   if (btnNext) btnNext.addEventListener("click", () => { if (state.month < 12) { state.month++; render(); } });
   if (selMonth) selMonth.addEventListener("change", function() { state.month = +this.value; render(); });
 
-  // 表示切替・削除
   document.querySelectorAll(".btn-toggle").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.id;
-    state.companies = state.companies.map(c => c.id===id ? {...c, visible:!c.visible} : c);
+    state.companies = state.companies.map(c => c.id === id ? { ...c, visible: !c.visible } : c);
     scheduleSave(); render();
   }));
   document.querySelectorAll(".btn-remove").forEach(btn => btn.addEventListener("click", () => {
     const id = btn.dataset.id;
-    state.companies = state.companies.filter(c => c.id!==id);
+    state.companies = state.companies.filter(c => c.id !== id);
     scheduleSave(); render();
   }));
 }
