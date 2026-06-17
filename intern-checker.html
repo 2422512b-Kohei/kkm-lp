@@ -8,6 +8,7 @@
   <meta http-equiv="Expires" content="0" />
   <title>インターン日程かぶりチェッカー</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { background:#f8fafc; color:#0f172a; font-family:system-ui,-apple-system,sans-serif; }
     .company-tag { display:inline-block; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:600; margin:1px; }
@@ -29,11 +30,9 @@
 //  定数
 // ============================================================
 const YEAR = 2026;
-const STORAGE_PREFIX = "intern-schedule-overlap:companies:v1:"; // + プロフィール名
-const PROFILES_KEY   = "intern-schedule-overlap:profiles";       // 既知のプロフィール一覧
-const LAST_PROFILE_KEY = "intern-schedule-overlap:lastProfile";  // 最後に使った人
-const OLD_KEY = "intern-schedule-overlap:companies:v1";           // 旧（単一）データの移行用
-const DEFAULT_PROFILE = "ゲスト";
+const CFG_URL_KEY = "ic:supabaseUrl";
+const CFG_KEY_KEY = "ic:supabaseAnonKey";
+const CACHE_PREFIX = "ic:cache:";   // + user.id （オフライン表示用キャッシュ）
 
 const COLORS = [
   { name:"ブルー",     bg:"#dbeafe", text:"#1e40af", accent:"#3b82f6" },
@@ -51,89 +50,162 @@ const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 // ============================================================
 //  状態
 // ============================================================
+let supa = null;        // Supabase クライアント
+let session = null;     // ログインセッション
+let saveTimer = null;   // クラウド保存のデバウンス
+
 let state = {
-  profile: "",      // 現在の「使う人」
-  profiles: [],     // 既知の人一覧
-  companies: [],    // 現在の人のデータ
+  view: "loading",      // loading | config | auth | app
+  companies: [],
   month: 6,
   inputName: "",
   inputText: "",
+  sync: "",             // 同期ステータス表示
+  authMode: "login",    // login | signup
+  authMsg: "",
 };
 
-// ---- 永続化（プロフィール別） ----
-function loadProfilesList() {
+// ---- 設定（接続情報） ----
+function getConfig() {
   try {
-    const p = JSON.parse(localStorage.getItem(PROFILES_KEY) || "[]");
-    return Array.isArray(p) ? p : [];
-  } catch(e) { return []; }
+    return {
+      url: localStorage.getItem(CFG_URL_KEY) || "",
+      key: localStorage.getItem(CFG_KEY_KEY) || "",
+    };
+  } catch(e) { return { url:"", key:"" }; }
 }
-function saveProfilesList() {
-  try { localStorage.setItem(PROFILES_KEY, JSON.stringify(state.profiles)); } catch(e) {}
-}
-function loadCompaniesFor(profile) {
+function setConfig(url, key) {
   try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + profile);
+    localStorage.setItem(CFG_URL_KEY, url.trim());
+    localStorage.setItem(CFG_KEY_KEY, key.trim());
+  } catch(e) {}
+}
+
+// ---- オフライン用ローカルキャッシュ ----
+function cacheLocal() {
+  if (!session) return;
+  try { localStorage.setItem(CACHE_PREFIX + session.user.id, JSON.stringify(state.companies)); } catch(e) {}
+}
+function loadCache() {
+  if (!session) return [];
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + session.user.id);
     const p = raw ? JSON.parse(raw) : [];
     return Array.isArray(p) ? p : [];
   } catch(e) { return []; }
 }
-function save() {
-  try { localStorage.setItem(STORAGE_PREFIX + state.profile, JSON.stringify(state.companies)); } catch(e) {}
-}
 
-// 「使う人」を切り替える（なければ作成）。データもその人のものを読み込む。
-function setProfile(name) {
-  name = (name || "").trim();
-  if (!name) return;
-  state.profile = name;
-  if (!state.profiles.includes(name)) {
-    state.profiles.push(name);
-    saveProfilesList();
+// ============================================================
+//  起動・認証
+// ============================================================
+async function boot() {
+  const { url, key } = getConfig();
+  if (!url || !key) { state.view = "config"; render(); return; }
+  if (typeof supabase === "undefined" || !supabase.createClient) {
+    state.view = "config";
+    state.authMsg = "Supabase ライブラリの読み込みに失敗しました。通信環境をご確認ください。";
+    render(); return;
   }
-  try { localStorage.setItem(LAST_PROFILE_KEY, name); } catch(e) {}
-  state.companies = loadCompaniesFor(name);
-  // 入力欄はクリア
-  state.inputName = ""; state.inputText = ""; state.month = 6;
-}
-
-// 「使う人」を削除（その人のデータも消す）
-function deleteProfile(name) {
-  state.profiles = state.profiles.filter(p => p !== name);
-  saveProfilesList();
-  try { localStorage.removeItem(STORAGE_PREFIX + name); } catch(e) {}
-  const next = state.profiles[0] || DEFAULT_PROFILE;
-  setProfile(next);
-}
-
-function init() {
-  state.profiles = loadProfilesList();
-  // 旧データ（単一）があれば「ゲスト」に移行
+  supa = supabase.createClient(url, key);
   try {
-    const old = localStorage.getItem(OLD_KEY);
-    if (old && state.profiles.length === 0) {
-      localStorage.setItem(STORAGE_PREFIX + DEFAULT_PROFILE, old);
-      state.profiles = [DEFAULT_PROFILE];
-      saveProfilesList();
-      localStorage.removeItem(OLD_KEY);
+    const { data } = await supa.auth.getSession();
+    session = data.session;
+  } catch(e) { session = null; }
+  supa.auth.onAuthStateChange((_event, s) => {
+    session = s;
+    afterAuth();
+  });
+  afterAuth();
+}
+
+async function afterAuth() {
+  if (!session) { state.view = "auth"; render(); return; }
+  state.view = "app";
+  state.companies = loadCache();   // まずキャッシュを表示
+  render();
+  await loadCloud();               // クラウドから最新を取得
+}
+
+async function loadCloud() {
+  if (!supa || !session) return;
+  setSync("読込中…");
+  try {
+    const { data, error } = await supa
+      .from("schedules").select("data")
+      .eq("user_id", session.user.id).maybeSingle();
+    if (error) throw error;
+    state.companies = (data && Array.isArray(data.data)) ? data.data : [];
+    cacheLocal();
+    setSync("☁️ 同期済み");
+    render();
+  } catch(e) {
+    setSync("⚠️ 読込失敗（キャッシュ表示中）");
+  }
+}
+
+function scheduleSave() {
+  cacheLocal();
+  setSync("保存中…");
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveCloud, 500);
+}
+
+async function saveCloud() {
+  if (!supa || !session) return;
+  try {
+    const { error } = await supa.from("schedules").upsert(
+      { user_id: session.user.id, data: state.companies, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    if (error) throw error;
+    setSync("☁️ 同期済み");
+  } catch(e) {
+    setSync("⚠️ 保存失敗（オフライン？）");
+  }
+}
+
+function setSync(msg) {
+  state.sync = msg;
+  const el = document.getElementById("sync-badge");
+  if (el) el.textContent = msg;
+}
+
+async function doAuth() {
+  const email = (document.getElementById("auth-email") || {}).value || "";
+  const pw = (document.getElementById("auth-pw") || {}).value || "";
+  if (!email.trim() || !pw) { state.authMsg = "メールとパスワードを入力してください。"; render(); return; }
+  state.authMsg = "処理中…"; render();
+  try {
+    if (state.authMode === "signup") {
+      const { data, error } = await supa.auth.signUp({ email: email.trim(), password: pw });
+      if (error) throw error;
+      if (data.session) { /* 即ログイン（メール確認OFFの場合） */ }
+      else { state.authMsg = "確認メールを送信しました。メール内のリンクを開いてから、ログインしてください。"; state.authMode = "login"; render(); }
+    } else {
+      const { error } = await supa.auth.signInWithPassword({ email: email.trim(), password: pw });
+      if (error) throw error;
     }
-  } catch(e) {}
-  let last = "";
-  try { last = localStorage.getItem(LAST_PROFILE_KEY) || ""; } catch(e) {}
-  if (!last) last = state.profiles[0] || DEFAULT_PROFILE;
-  setProfile(last);
+  } catch(e) {
+    state.authMsg = "エラー: " + (e && e.message ? e.message : "失敗しました");
+    render();
+  }
+}
+
+async function doLogout() {
+  try { await supa.auth.signOut(); } catch(e) {}
+  session = null; state.view = "auth"; render();
 }
 
 // ============================================================
 //  解析ロジック
 // ============================================================
-// 全角 → 半角（数字・記号・空白）に正規化
 function normalize(s) {
   return String(s)
-    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)) // 全角数字
-    .replace(/／/g, "/")          // 全角スラッシュ
-    .replace(/[〜～]/g, "~")       // 波ダッシュ / 全角チルダ
-    .replace(/[－ー―–—]/g, "-")   // 各種ハイフン・長音
-    .replace(/　/g, " ");         // 全角スペース
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/／/g, "/")
+    .replace(/[〜～]/g, "~")
+    .replace(/[－ー―–—]/g, "-")
+    .replace(/　/g, " ");
 }
 
 function parseDates(text) {
@@ -147,7 +219,6 @@ function parseDates(text) {
     if (seen.has(k)) return;
     seen.add(k); results.push({ month: m, day: d });
   };
-  // 範囲を1日ずつ展開（m1/d1 〜 m2/d2）
   const pushRange = (m1, d1, m2, d2) => {
     if (m1 < 1 || m1 > 12 || m2 < 1 || m2 > 12) return;
     const start = new Date(YEAR, m1 - 1, d1);
@@ -158,27 +229,18 @@ function parseDates(text) {
       push(dt.getMonth() + 1, dt.getDate());
     }
   };
-
-  // 先に「範囲」を処理し、消費した箇所は空白に置換して二重カウントを防ぐ
-  // 1) 月またぎ: 7/30~8/2
   text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})\/(\d{1,2})/g,
     (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
-  // 2) 月またぎ（和式）: 7月30日~8月2日
   text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g,
     (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
-  // 3) 同月: 7/24~26
   text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})/g,
     (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
-  // 4) 同月（和式）: 7月24日~26日 / 7月24~26日
   text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*日?/g,
     (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
-  // 5) 単独（和式）: 7月21日
   text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g,
     (_, a, b) => { push(+a, +b); return " "; });
-  // 6) 単独（スラッシュ）: 8/4
   text = text.replace(/(\d{1,2})\/(\d{1,2})/g,
     (_, a, b) => { push(+a, +b); return " "; });
-
   results.sort((a,b) => a.month - b.month || a.day - b.day);
   return results;
 }
@@ -193,55 +255,91 @@ function pickColor(used) {
   const unused = COLORS.find(c => !used.includes(c.name));
   return unused || COLORS[used.length % COLORS.length];
 }
-
 function uid() {
   return (typeof crypto !== "undefined" && crypto.randomUUID)
     ? crypto.randomUUID()
     : Date.now() + "-" + Math.random().toString(36).slice(2);
 }
-
 function e(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
 // ============================================================
-//  「使う人」バー
+//  画面：接続設定
 // ============================================================
-function renderProfileBar() {
-  const opts = state.profiles.map(p =>
-    `<option value="${e(p)}" ${p===state.profile?"selected":""}>${e(p)}</option>`
-  ).join("");
+function renderConfig() {
+  const { url, key } = getConfig();
   return `
-  <div class="border-b border-slate-200 bg-white">
-    <div class="mx-auto max-w-7xl px-5 py-2.5 flex flex-wrap items-center gap-2">
-      <span class="text-xs font-bold text-slate-500">👤 使う人</span>
-      ${state.profiles.length > 1
-        ? `<select id="sel-profile" class="rounded-lg border border-slate-200 px-2 py-1 text-sm font-bold text-indigo-700 outline-none">${opts}</select>`
-        : `<span class="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700">${e(state.profile)}</span>`
-      }
-      ${state.profiles.length > 1
-        ? `<button id="btn-del-profile" class="text-xs text-slate-400 hover:text-red-600" title="この人を削除">削除</button>`
-        : ""
-      }
-      <div class="flex items-center gap-1.5 ml-auto">
-        <input id="inp-profile" type="text" placeholder="名前 / 合言葉" autocomplete="off"
-          class="w-36 rounded-lg border border-slate-300 px-2.5 py-1 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
-        <button id="btn-switch" class="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-bold text-white hover:bg-indigo-700">切替 / 新規</button>
-      </div>
+  <div class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h1 class="text-lg font-black text-slate-900 mb-1">初期設定（最初の1回だけ）</h1>
+      <p class="text-xs text-slate-500 mb-4">Supabase の「Project URL」と「anon public key」を貼り付けてください。（この2つは公開しても安全な値です）</p>
+      ${state.authMsg ? `<p class="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">${e(state.authMsg)}</p>` : ""}
+      <label class="block text-xs font-semibold text-slate-500 mb-1">Project URL</label>
+      <input id="cfg-url" type="text" value="${e(url)}" placeholder="https://xxxx.supabase.co"
+        class="w-full mb-3 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+      <label class="block text-xs font-semibold text-slate-500 mb-1">anon public key</label>
+      <textarea id="cfg-key" rows="3" placeholder="eyJhbGciOi..."
+        class="w-full mb-4 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500">${e(key)}</textarea>
+      <button id="cfg-save" class="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">保存して続ける</button>
     </div>
   </div>`;
 }
 
 // ============================================================
-//  ヘッダー
+//  画面：ログイン
 // ============================================================
+function renderAuth() {
+  const isSignup = state.authMode === "signup";
+  return `
+  <div class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div class="flex items-center gap-2 mb-4">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-xl text-white">📅</div>
+        <h1 class="text-base font-black text-slate-900">インターン日程かぶりチェッカー</h1>
+      </div>
+      <p class="text-sm font-bold text-slate-700 mb-3">${isSignup ? "新規登録" : "ログイン"}</p>
+      ${state.authMsg ? `<p class="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">${e(state.authMsg)}</p>` : ""}
+      <label class="block text-xs font-semibold text-slate-500 mb-1">メールアドレス</label>
+      <input id="auth-email" type="email" autocomplete="username" placeholder="you@example.com"
+        class="w-full mb-3 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+      <label class="block text-xs font-semibold text-slate-500 mb-1">パスワード</label>
+      <input id="auth-pw" type="password" autocomplete="${isSignup?"new-password":"current-password"}" placeholder="6文字以上"
+        class="w-full mb-4 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+      <button id="auth-go" class="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 mb-3">
+        ${isSignup ? "登録する" : "ログイン"}
+      </button>
+      <p class="text-center text-xs text-slate-500">
+        ${isSignup ? "すでにアカウントがある →" : "はじめての方は →"}
+        <button id="auth-toggle" class="font-bold text-indigo-600 hover:underline">${isSignup ? "ログイン" : "新規登録"}</button>
+      </p>
+      <p class="mt-4 text-center"><button id="cfg-open" class="text-[11px] text-slate-400 hover:underline">接続設定を変更</button></p>
+    </div>
+  </div>`;
+}
+
+// ============================================================
+//  画面：アプリ本体
+// ============================================================
+function renderAccountBar() {
+  const email = session && session.user ? session.user.email : "";
+  return `
+  <div class="border-b border-slate-200 bg-white">
+    <div class="mx-auto max-w-7xl px-5 py-2.5 flex flex-wrap items-center gap-2">
+      <span class="text-xs font-bold text-slate-500">👤 ${e(email)}</span>
+      <span id="sync-badge" class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">${e(state.sync)}</span>
+      <div class="ml-auto flex items-center gap-2">
+        <button id="btn-reload" class="text-xs text-slate-400 hover:text-indigo-600">再読込</button>
+        <button id="btn-logout" class="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50">ログアウト</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderHeader() {
   const vis = state.companies.filter(c=>c.visible);
   const map = new Map();
-  vis.forEach(c => c.dates.forEach(d => {
-    const k = d.month+"-"+d.day;
-    map.set(k, (map.get(k)||0)+1);
-  }));
+  vis.forEach(c => c.dates.forEach(d => { const k=d.month+"-"+d.day; map.set(k,(map.get(k)||0)+1); }));
   const total = [...map.values()].filter(n=>n>=2).length;
   const badge = total > 0
     ? `<span class="flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-sm font-bold text-red-700">⚠️ 重複 ${total} 日</span>`
@@ -252,16 +350,13 @@ function renderHeader() {
       <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-xl text-white">📅</div>
       <div>
         <h1 class="text-lg font-black text-slate-900">インターン日程かぶりチェッカー</h1>
-        <p class="text-xs text-slate-500">${e(state.profile)} さんの予定 ・ ${YEAR}年の重複を一目で確認</p>
+        <p class="text-xs text-slate-500">${YEAR}年の重複を一目で確認 ・ どの端末でも同じデータ</p>
       </div>
       <div class="ml-auto">${badge}</div>
     </div>
   </header>`;
 }
 
-// ============================================================
-//  入力フォーム（動的部分は #form-dynamic に分離してフォーカス維持）
-// ============================================================
 function renderFormDynamic() {
   const preview = parseDates(state.inputText);
   const ename = e(state.inputName.trim() || guessName(state.inputText));
@@ -269,7 +364,7 @@ function renderFormDynamic() {
     <div class="rounded-lg bg-slate-50 p-3">
       <div class="text-xs font-semibold text-slate-500 mb-1.5">✨ 抽出プレビュー${ename ? ` <span class="text-indigo-600">／ ${ename}</span>` : ""}</div>
       ${preview.length === 0
-        ? `<p class="text-xs text-slate-400">日付が見つかりません（「7月21日」や「8/4」の形式で入力してください）</p>`
+        ? `<p class="text-xs text-slate-400">日付が見つかりません（「7月21日」や「8/4」「7/24~26」の形式で入力してください）</p>`
         : preview.map(d=>`<span class="date-chip">${d.month}/${d.day}</span>`).join("")
       }
     </div>`;
@@ -295,7 +390,7 @@ function renderInputForm() {
           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
       </div>
       <div>
-        <label class="block text-xs font-semibold text-slate-500 mb-1">日程テキスト（コピペでも手入力でもOK・全角/半角どちらも可）</label>
+        <label class="block text-xs font-semibold text-slate-500 mb-1">日程テキスト（コピペでも手入力でもOK・全角/半角可）</label>
         <textarea id="inp-text" rows="6" placeholder="例:&#10;関西電力 7/21、8/4&#10;7/24~26（範囲もOK→24・25・26）&#10;7月30日〜8月2日&#10;A社 8/4, 8/5, 9/1"
           class="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">${e(state.inputText)}</textarea>
       </div>
@@ -304,9 +399,6 @@ function renderInputForm() {
   </div>`;
 }
 
-// ============================================================
-//  サイドバー
-// ============================================================
 function renderSidebar() {
   const cs = state.companies;
   const list = cs.length === 0
@@ -343,21 +435,16 @@ function renderSidebar() {
   </div>`;
 }
 
-// ============================================================
-//  カレンダー
-// ============================================================
 function renderCalendar() {
   const vis = state.companies.filter(c=>c.visible);
   const y = YEAR, mo = state.month;
   const firstDay = new Date(y, mo-1, 1).getDay();
   const daysInMonth = new Date(y, mo, 0).getDate();
-
   let conflictCount = 0;
   const cells = [];
   for (let i=0; i<firstDay; i++) cells.push(null);
   for (let d=1; d<=daysInMonth; d++) {
-    const events = vis
-      .filter(c => c.dates.some(dt => dt.month===mo && dt.day===d))
+    const events = vis.filter(c => c.dates.some(dt => dt.month===mo && dt.day===d))
       .map(c => ({ name: c.name, bg: c.color.bg, text: c.color.text }));
     if (events.length >= 2) conflictCount++;
     cells.push({ day: d, events });
@@ -365,8 +452,7 @@ function renderCalendar() {
   while (cells.length % 7 !== 0) cells.push(null);
 
   const conflictBadge = conflictCount > 0
-    ? `<span class="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">⚠️ この月 ${conflictCount} 日の重複</span>`
-    : "";
+    ? `<span class="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">⚠️ この月 ${conflictCount} 日の重複</span>` : "";
   const monthOpts = MONTHS.map(m => `<option value="${m}" ${m===mo?"selected":""}>${m}月</option>`).join("");
 
   const cellsHtml = cells.map((cell, idx) => {
@@ -397,9 +483,7 @@ function renderCalendar() {
       </div>
       <div class="flex items-center gap-1.5">
         <button id="btn-prev" class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50">◀</button>
-        <select id="sel-month" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-bold text-slate-700 outline-none">
-          ${monthOpts}
-        </select>
+        <select id="sel-month" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-bold text-slate-700 outline-none">${monthOpts}</select>
         <button id="btn-next" class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50">▶</button>
       </div>
     </div>
@@ -416,38 +500,35 @@ function renderCalendar() {
   </div>`;
 }
 
-function svgEye() {
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
-}
-function svgEyeOff() {
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/></svg>`;
-}
-function svgTrash() {
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+function svgEye() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`; }
+function svgEyeOff() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/></svg>`; }
+function svgTrash() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`; }
+
+function renderApp() {
+  return `
+    ${renderAccountBar()}
+    ${renderHeader()}
+    <div class="mx-auto max-w-7xl px-5 py-5">
+      <div class="grid grid-cols-1 gap-5 lg:grid-cols-[340px_1fr]">
+        <div class="space-y-5">${renderInputForm()}${renderSidebar()}</div>
+        <div class="space-y-4">${renderCalendar()}</div>
+      </div>
+    </div>`;
 }
 
 // ============================================================
 //  描画
 // ============================================================
 function render() {
-  document.getElementById("app").innerHTML = `
-    ${renderProfileBar()}
-    ${renderHeader()}
-    <div class="mx-auto max-w-7xl px-5 py-5">
-      <div class="grid grid-cols-1 gap-5 lg:grid-cols-[340px_1fr]">
-        <div class="space-y-5">
-          ${renderInputForm()}
-          ${renderSidebar()}
-        </div>
-        <div class="space-y-4">
-          ${renderCalendar()}
-        </div>
-      </div>
-    </div>`;
+  let html = "";
+  if (state.view === "loading") html = `<div class="min-h-screen flex items-center justify-center text-slate-400 text-sm">読み込み中…</div>`;
+  else if (state.view === "config") html = renderConfig();
+  else if (state.view === "auth") html = renderAuth();
+  else html = renderApp();
+  document.getElementById("app").innerHTML = html;
   bindEvents();
 }
 
-// 入力フォームの動的部分（プレビュー＋追加ボタン）だけ更新 → textareaのフォーカス維持
 function updateFormDynamic() {
   const box = document.getElementById("form-dynamic");
   if (!box) return;
@@ -465,44 +546,44 @@ function bindAddButton() {
     state.companies.push({ id: uid(), name, color, dates, visible: true, rawText: state.inputText });
     if (dates.length) state.month = dates[0].month;
     state.inputName = ""; state.inputText = "";
-    save(); render();
+    scheduleSave(); render();
   });
 }
 
 function bindEvents() {
-  // --- 使う人バー ---
-  const selProfile = document.getElementById("sel-profile");
-  if (selProfile) selProfile.addEventListener("change", function() {
-    setProfile(this.value); render();
-  });
-  const btnSwitch = document.getElementById("btn-switch");
-  const inpProfile = document.getElementById("inp-profile");
-  if (btnSwitch) btnSwitch.addEventListener("click", () => {
-    if (inpProfile && inpProfile.value.trim()) { setProfile(inpProfile.value); render(); }
-  });
-  if (inpProfile) inpProfile.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" && inpProfile.value.trim()) { setProfile(inpProfile.value); render(); }
-  });
-  const btnDel = document.getElementById("btn-del-profile");
-  if (btnDel) btnDel.addEventListener("click", () => {
-    if (confirm(`「${state.profile}」さんのデータを削除しますか？（元に戻せません）`)) {
-      deleteProfile(state.profile); render();
-    }
+  // 設定画面
+  const cfgSave = document.getElementById("cfg-save");
+  if (cfgSave) cfgSave.addEventListener("click", () => {
+    const url = (document.getElementById("cfg-url")||{}).value || "";
+    const key = (document.getElementById("cfg-key")||{}).value || "";
+    if (!url.trim() || !key.trim()) { state.authMsg = "両方の入力が必要です。"; render(); return; }
+    setConfig(url, key); state.authMsg = ""; state.view = "loading"; render(); boot();
   });
 
-  // --- 入力フィールド：全体再描画せず動的部分だけ更新 ---
+  // ログイン画面
+  const authGo = document.getElementById("auth-go");
+  if (authGo) authGo.addEventListener("click", doAuth);
+  const authToggle = document.getElementById("auth-toggle");
+  if (authToggle) authToggle.addEventListener("click", () => { state.authMode = state.authMode==="login"?"signup":"login"; state.authMsg=""; render(); });
+  const authPw = document.getElementById("auth-pw");
+  if (authPw) authPw.addEventListener("keydown", ev => { if (ev.key==="Enter") doAuth(); });
+  const cfgOpen = document.getElementById("cfg-open");
+  if (cfgOpen) cfgOpen.addEventListener("click", () => { state.view="config"; render(); });
+
+  // アプリ：アカウントバー
+  const btnLogout = document.getElementById("btn-logout");
+  if (btnLogout) btnLogout.addEventListener("click", doLogout);
+  const btnReload = document.getElementById("btn-reload");
+  if (btnReload) btnReload.addEventListener("click", loadCloud);
+
+  // 入力
   const inpName = document.getElementById("inp-name");
   const inpText = document.getElementById("inp-text");
-  if (inpName) inpName.addEventListener("input", function() {
-    state.inputName = this.value; updateFormDynamic();
-  });
-  if (inpText) inpText.addEventListener("input", function() {
-    state.inputText = this.value; updateFormDynamic();
-  });
-
+  if (inpName) inpName.addEventListener("input", function() { state.inputName = this.value; updateFormDynamic(); });
+  if (inpText) inpText.addEventListener("input", function() { state.inputText = this.value; updateFormDynamic(); });
   bindAddButton();
 
-  // --- 月切替 ---
+  // 月切替
   const btnPrev = document.getElementById("btn-prev");
   const btnNext = document.getElementById("btn-next");
   const selMonth = document.getElementById("sel-month");
@@ -510,28 +591,24 @@ function bindEvents() {
   if (btnNext) btnNext.addEventListener("click", () => { if (state.month < 12) { state.month++; render(); } });
   if (selMonth) selMonth.addEventListener("change", function() { state.month = +this.value; render(); });
 
-  // --- 表示切替・削除 ---
-  document.querySelectorAll(".btn-toggle").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.id;
-      state.companies = state.companies.map(c => c.id===id ? {...c, visible:!c.visible} : c);
-      save(); render();
-    });
-  });
-  document.querySelectorAll(".btn-remove").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const id = btn.dataset.id;
-      state.companies = state.companies.filter(c => c.id!==id);
-      save(); render();
-    });
-  });
+  // 表示切替・削除
+  document.querySelectorAll(".btn-toggle").forEach(btn => btn.addEventListener("click", () => {
+    const id = btn.dataset.id;
+    state.companies = state.companies.map(c => c.id===id ? {...c, visible:!c.visible} : c);
+    scheduleSave(); render();
+  }));
+  document.querySelectorAll(".btn-remove").forEach(btn => btn.addEventListener("click", () => {
+    const id = btn.dataset.id;
+    state.companies = state.companies.filter(c => c.id!==id);
+    scheduleSave(); render();
+  }));
 }
 
 // ============================================================
 //  起動
 // ============================================================
-init();
 render();
+boot();
 </script>
 </body>
 </html>
