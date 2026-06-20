@@ -65,7 +65,26 @@
       { name: "indigo",  bg: "bg-indigo-500",  text: "text-indigo-700",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
     ];
 
-    const TARGET_YEAR = 2026;
+    // 対象期間: 2026年6月 〜 2027年6月
+    const START_YEAR = 2026, START_MONTH = 6;
+    const END_YEAR = 2027, END_MONTH = 6;
+
+    // 表示対象の {year, month} の並び（2026/6 … 2027/6）
+    const MONTH_SEQUENCE = (() => {
+      const list = [];
+      let y = START_YEAR, m = START_MONTH;
+      while (y < END_YEAR || (y === END_YEAR && m <= END_MONTH)) {
+        list.push({ year: y, month: m });
+        m++; if (m > 12) { m = 1; y++; }
+      }
+      return list;
+    })();
+
+    // 年が省略されたときの推定（6〜12月→2026年、1〜5月→2027年）
+    function inferYear(month) {
+      return month >= START_MONTH ? START_YEAR : END_YEAR;
+    }
+
     const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
     // ==========================================
@@ -110,10 +129,12 @@
     // ==========================================
     // ユーティリティ
     // ==========================================
-    function createDateObj(month, day) {
+    function createDateObj(year, month, day) {
+      // 後方互換: 旧データは (month, day) で呼ばれていたため引数2つなら年を推定
+      if (day === undefined) { day = month; month = year; year = inferYear(month); }
       const mm = String(month).padStart(2, "0");
       const dd = String(day).padStart(2, "0");
-      return { month, day, formatted: `${TARGET_YEAR}-${mm}-${dd}` };
+      return { year, month, day, formatted: `${year}-${mm}-${dd}` };
     }
 
     function normalize(s) {
@@ -133,32 +154,38 @@
       cleanText = cleanText.replace(/[(（][日一月火水木金土][)）]/g, "");
 
       const seen = new Set();
-      const push = (month, day) => {
+      // 年は省略時に推定。範囲展開では Date から年が決まる
+      const push = (month, day, year) => {
         month = +month; day = +day;
         if (!month || !day || month < 1 || month > 12 || day < 1 || day > 31) return;
-        const k = month + "-" + day;
+        year = year || inferYear(month);
+        const k = year + "-" + month + "-" + day;
         if (seen.has(k)) return;
         seen.add(k);
-        dates.push(createDateObj(month, day));
+        dates.push(createDateObj(year, month, day));
       };
-      const pushRange = (m1, d1, m2, d2) => {
+      const pushRange = (y1, m1, d1, y2, m2, d2) => {
         if (m1 < 1 || m1 > 12 || m2 < 1 || m2 > 12) return;
-        const start = new Date(TARGET_YEAR, m1 - 1, d1);
-        const end = new Date(TARGET_YEAR, m2 - 1, d2);
+        const start = new Date(y1, m1 - 1, d1);
+        const end = new Date(y2, m2 - 1, d2);
         if (isNaN(start) || isNaN(end) || end < start) return;
         let guard = 0;
         for (let dt = new Date(start); dt <= end && guard < 400; dt.setDate(dt.getDate() + 1), guard++) {
-          push(dt.getMonth() + 1, dt.getDate());
+          push(dt.getMonth() + 1, dt.getDate(), dt.getFullYear());
         }
       };
 
-      // 月またぎ期間「7/30~8/3」「7月30日〜8月3日」
+      // 年付き単発「2027/3/1」「2027年3月1日」
+      cleanText = cleanText.replace(/(20\d{2})\s*[\/年]\s*(\d{1,2})\s*[\/月]\s*(\d{1,2})\s*日?/g,
+        (_, y, a, b) => { push(+a, +b, +y); return " "; });
+
+      // 月またぎ期間「7/30~8/3」「7月30日〜8月3日」（年は各月から推定）
       cleanText = cleanText.replace(/(\d{1,2})\s*(?:\/|月)\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*(?:\/|月)\s*(\d{1,2})\s*日?/g,
-        (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
+        (_, a, b, c, d) => { pushRange(inferYear(+a), +a, +b, inferYear(+c), +c, +d); return " "; });
 
       // 同一月内の期間「7/24~30」「8月1日〜5日」
       cleanText = cleanText.replace(/(\d{1,2})\s*(?:\/|月)\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*日?/g,
-        (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
+        (_, a, b, c) => { const y = inferYear(+a); pushRange(y, +a, +b, y, +a, +c); return " "; });
 
       // 単発「7月21日」
       cleanText = cleanText.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g,
@@ -168,7 +195,7 @@
       cleanText = cleanText.replace(/(\d{1,2})\s*\/\s*(\d{1,2})/g,
         (_, a, b) => { push(+a, +b); return " "; });
 
-      return dates.sort((a, b) => a.month - b.month || a.day - b.day);
+      return dates.sort((a, b) => (a.year - b.year) || (a.month - b.month) || (a.day - b.day));
     }
 
     function guessName(text) {
@@ -190,14 +217,28 @@
       const [schedules, setSchedules] = useState([]);
       const [companyInput, setCompanyInput] = useState("");
       const [textInput, setTextInput] = useState("");
-      const [currentMonth, setCurrentMonth] = useState(6);
+      const [currentYear, setCurrentYear] = useState(START_YEAR);
+      const [currentMonth, setCurrentMonth] = useState(START_MONTH);
       const [isMounted, setIsMounted] = useState(false);
+
+      const goToYM = (year, month) => { setCurrentYear(year); setCurrentMonth(month); };
 
       useEffect(() => {
         setIsMounted(true);
         try {
           const saved = localStorage.getItem("intern_schedules_v2");
-          if (saved) setSchedules(JSON.parse(saved));
+          if (saved) {
+            // 旧データ（year欄なし）を formatted から補完
+            const parsed = JSON.parse(saved).map(s => ({
+              ...s,
+              dates: (s.dates || []).map(d => {
+                if (d.year) return d;
+                const y = d.formatted ? parseInt(d.formatted.slice(0, 4), 10) : inferYear(d.month);
+                return { ...d, year: y };
+              }),
+            }));
+            setSchedules(parsed);
+          }
         } catch (e) {}
       }, []);
 
@@ -240,7 +281,7 @@
         }]);
         setCompanyInput("");
         setTextInput("");
-        if (extractedDates.length > 0) setCurrentMonth(extractedDates[0].month);
+        if (extractedDates.length > 0) goToYM(extractedDates[0].year, extractedDates[0].month);
       };
 
       const toggleVisibility = (id) =>
@@ -249,19 +290,26 @@
       const deleteSchedule = (id) =>
         setSchedules(prev => prev.filter(s => s.id !== id));
 
+      // 個別の日付を削除（削除後に日程が0件になった企業は自動で除去）
+      const deleteDate = (id, formatted) =>
+        setSchedules(prev => prev
+          .map(s => s.id === id ? { ...s, dates: s.dates.filter(d => d.formatted !== formatted) } : s)
+          .filter(s => s.dates.length > 0));
+
       // デモデータ
       const loadDemoData = () => {
         setSchedules([
-          { id: "demo-1", name: "関西電力", rawText: "", dates: [createDateObj(7,21), createDateObj(8,4), createDateObj(9,8)], color: "blue", visible: true },
-          { id: "demo-2", name: "A社(5days)", rawText: "", dates: [createDateObj(7,28), createDateObj(7,29), createDateObj(7,30), createDateObj(7,31), createDateObj(8,1)], color: "emerald", visible: true },
-          { id: "demo-3", name: "サイバー系B社", rawText: "", dates: [createDateObj(7,30), createDateObj(8,4)], color: "violet", visible: true },
+          { id: "demo-1", name: "関西電力", rawText: "", dates: [createDateObj(2026,7,21), createDateObj(2026,8,4), createDateObj(2026,9,8)], color: "blue", visible: true },
+          { id: "demo-2", name: "A社(5days)", rawText: "", dates: [createDateObj(2026,7,28), createDateObj(2026,7,29), createDateObj(2026,7,30), createDateObj(2026,7,31), createDateObj(2026,8,1)], color: "emerald", visible: true },
+          { id: "demo-3", name: "サイバー系B社", rawText: "", dates: [createDateObj(2026,7,30), createDateObj(2026,8,4), createDateObj(2027,3,1)], color: "violet", visible: true },
         ]);
-        setCurrentMonth(7);
+        goToYM(2026, 7);
       };
 
       // カレンダー計算
-      const firstDayOfWeek = new Date(TARGET_YEAR, currentMonth - 1, 1).getDay();
-      const totalDays = new Date(TARGET_YEAR, currentMonth, 0).getDate();
+      const firstDayOfWeek = new Date(currentYear, currentMonth - 1, 1).getDay();
+      const totalDays = new Date(currentYear, currentMonth, 0).getDate();
+      const seqIndex = MONTH_SEQUENCE.findIndex(s => s.year === currentYear && s.month === currentMonth);
 
       const dateMap = {};
       schedules.forEach(comp => {
@@ -285,7 +333,7 @@
                 </div>
                 <div>
                   <h1 className="text-xl font-bold tracking-tight text-slate-900">インターン日程バッティングチェッカー</h1>
-                  <p className="text-xs text-slate-500 font-medium">複数企業の候補日テキストを一括抽出・重複可視化 ({TARGET_YEAR}年専用)</p>
+                  <p className="text-xs text-slate-500 font-medium">複数企業の候補日テキストを一括抽出・重複可視化 (2026年6月〜2027年6月)</p>
                 </div>
               </div>
               {schedules.length === 0 && (
@@ -399,11 +447,20 @@
                               <h3 className="text-sm font-bold text-slate-800 line-clamp-1">{comp.name}</h3>
                               <div className="flex flex-wrap gap-1 mt-1.5">
                                 {comp.dates.map((d, idx) => (
-                                  <span key={idx} className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${palette.badge}`}>
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => deleteDate(comp.id, d.formatted)}
+                                    title={`${d.year}/${d.month}/${d.day} を削除`}
+                                    className={`group/chip flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-mono border transition hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 ${palette.badge}`}
+                                  >
+                                    {d.year !== START_YEAR && <span className="opacity-60">'{String(d.year).slice(2)}</span>}
                                     {d.month}/{d.day}
-                                  </span>
+                                    <span className="font-bold text-slate-400 group-hover/chip:text-rose-500">×</span>
+                                  </button>
                                 ))}
                               </div>
+                              <p className="text-[10px] text-slate-400 mt-1">日付をタップで個別削除</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0 ml-2">
@@ -424,23 +481,43 @@
 
             {/* カレンダー */}
             <div className="lg:col-span-8 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-extrabold text-slate-900 font-mono">{TARGET_YEAR}年</span>
-                  <span className="text-2xl font-black text-indigo-600 font-mono">{currentMonth}月</span>
+              <div className="flex flex-col gap-4 mb-6 pb-4 border-b border-slate-100">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-extrabold text-slate-900 font-mono">{currentYear}年</span>
+                    <span className="text-2xl font-black text-indigo-600 font-mono">{currentMonth}月</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={seqIndex <= 0}
+                      onClick={() => { const p = MONTH_SEQUENCE[seqIndex - 1]; if (p) goToYM(p.year, p.month); }}
+                      className="px-2.5 py-1 text-sm font-bold rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >‹ 前月</button>
+                    <button
+                      type="button"
+                      disabled={seqIndex >= MONTH_SEQUENCE.length - 1}
+                      onClick={() => { const n = MONTH_SEQUENCE[seqIndex + 1]; if (n) goToYM(n.year, n.month); }}
+                      className="px-2.5 py-1 text-sm font-bold rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >翌月 ›</button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-lg">
-                  {[6, 7, 8, 9, 10, 11, 12].map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setCurrentMonth(m)}
-                      className={`px-3 py-1 text-xs font-bold rounded-md font-mono transition-all ${
-                        currentMonth === m ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      {m}月
-                    </button>
-                  ))}
+                  {MONTH_SEQUENCE.map(({ year, month }) => {
+                    const active = year === currentYear && month === currentMonth;
+                    return (
+                      <button
+                        key={`${year}-${month}`}
+                        onClick={() => goToYM(year, month)}
+                        title={`${year}年${month}月`}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-md font-mono transition-all ${
+                          active ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <span className="opacity-50">'{String(year).slice(2)}</span>{month}月
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -461,7 +538,7 @@
                   const dayNum = idx + 1;
                   const mm = String(currentMonth).padStart(2, "0");
                   const dd = String(dayNum).padStart(2, "0");
-                  const dateStr = `${TARGET_YEAR}-${mm}-${dd}`;
+                  const dateStr = `${currentYear}-${mm}-${dd}`;
                   const dayEvents = dateMap[dateStr] || [];
                   const eventCount = dayEvents.length;
                   const isConflict = eventCount >= 2;
