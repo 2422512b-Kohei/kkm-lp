@@ -10,7 +10,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
   <style>
     body { background: #f8fafc; }
     .custom-scrollbar::-webkit-scrollbar { width: 4px; }
@@ -21,7 +21,36 @@
 <body>
   <div id="root"></div>
 
-  <script type="text/babel">
+  <!-- 読み込み失敗・JSエラー時に真っ白にならないようフォールバック表示 -->
+  <noscript><div style="padding:24px;font-family:sans-serif">このページはJavaScriptが必要です。ブラウザの設定をご確認ください。</div></noscript>
+  <script>
+    // CDN(React/Babel)が読み込めなかった場合に案内を出す
+    window.addEventListener("load", function () {
+      setTimeout(function () {
+        var root = document.getElementById("root");
+        var ready = window.React && window.ReactDOM && window.Babel;
+        if (root && !root.hasChildNodes()) {
+          if (!ready) {
+            root.innerHTML = '<div style="padding:24px;max-width:560px;margin:40px auto;font-family:sans-serif;color:#334155">'
+              + '<h2 style="font-size:18px;font-weight:700;margin-bottom:8px">読み込みに失敗しました</h2>'
+              + '<p style="font-size:14px;line-height:1.7">通信環境により、必要なライブラリ（React / Babel）を読み込めませんでした。'
+              + 'Wi-Fiなど安定した回線で、ページを再読み込みしてください。</p></div>';
+          }
+        }
+      }, 6000);
+    });
+    // 実行時エラーを画面に出す
+    window.addEventListener("error", function (ev) {
+      var root = document.getElementById("root");
+      if (root && !root.hasChildNodes()) {
+        root.innerHTML = '<div style="padding:24px;max-width:560px;margin:40px auto;font-family:sans-serif;color:#334155">'
+          + '<h2 style="font-size:18px;font-weight:700;margin-bottom:8px">表示エラー</h2>'
+          + '<p style="font-size:13px;line-height:1.7;color:#64748b">' + String(ev.message || ev.error || "") + '</p></div>';
+      }
+    });
+  </script>
+
+  <script type="text/babel" data-presets="env,react">
     const { useState, useEffect } = React;
 
     // ==========================================
@@ -135,8 +164,8 @@
       cleanText = cleanText.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g,
         (_, a, b) => { push(+a, +b); return " "; });
 
-      // 単発「8/4」
-      cleanText = cleanText.replace(/(?<!\d)(\d{1,2})\s*\/\s*(\d{1,2})(?!\d)/g,
+      // 単発「8/4」（後読みは古いSafariで非対応のため使わない）
+      cleanText = cleanText.replace(/(\d{1,2})\s*\/\s*(\d{1,2})/g,
         (_, a, b) => { push(+a, +b); return " "; });
 
       return dates.sort((a, b) => a.month - b.month || a.day - b.day);
@@ -486,8 +515,15 @@
       );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<InternScheduler />);
+    try {
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<InternScheduler />);
+    } catch (err) {
+      document.getElementById("root").innerHTML =
+        '<div style="padding:24px;max-width:560px;margin:40px auto;font-family:sans-serif;color:#334155">'
+        + '<h2 style="font-size:18px;font-weight:700;margin-bottom:8px">表示エラー</h2>'
+        + '<p style="font-size:13px;color:#64748b">' + String(err && err.message ? err.message : err) + '</p></div>';
+    }
   </script>
 </body>
 </html>
