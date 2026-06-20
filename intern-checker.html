@@ -6,536 +6,488 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>インターン日程かぶりチェッカー</title>
+  <title>インターン日程バッティングチェッカー</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    body { background:#f8fafc; color:#0f172a; font-family:system-ui,-apple-system,sans-serif; }
-    .company-tag { display:inline-block; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:600; margin:1px; }
-    .date-chip { display:inline-block; border-radius:6px; padding:1px 8px; font-size:11px; font-weight:500; margin:2px; background:#fff; box-shadow:0 0 0 1px #e2e8f0; }
-    .cell-conflict2 { background:#fff1f2 !important; box-shadow:0 0 0 1px #fecaca; }
-    .cell-conflict3 { background:#fee2e2 !important; box-shadow:0 0 0 2px #fca5a5; }
-    .cell-normal { background:#fff; box-shadow:0 0 0 1px #f1f5f9; }
-    .badge-conflict { background:#ef4444; color:#fff; border-radius:4px; padding:0 4px; font-size:9px; font-weight:700; white-space:nowrap; }
-    textarea { font-family:inherit; }
-    button:disabled { cursor:not-allowed; opacity:0.5; }
+    body { background: #f8fafc; }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
   </style>
 </head>
 <body>
+  <div id="root"></div>
 
-<div id="app"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
 
-<script>
-// ============================================================
-//  Firebase 設定（取得後にここへ貼り付けると初期設定画面なしで使えます）
-//  例: const FIREBASE_CONFIG = { apiKey:"...", authDomain:"...", projectId:"...", ... };
-// ============================================================
-const FIREBASE_CONFIG = null;
+    // ==========================================
+    // 定数
+    // ==========================================
+    const COLOR_PALETTES = [
+      { name: "blue",    bg: "bg-blue-500",    text: "text-blue-700",    badge: "bg-blue-50 text-blue-700 border-blue-200" },
+      { name: "emerald", bg: "bg-emerald-500", text: "text-emerald-700", badge: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+      { name: "violet",  bg: "bg-violet-500",  text: "text-violet-700",  badge: "bg-violet-50 text-violet-700 border-violet-200" },
+      { name: "amber",   bg: "bg-amber-500",   text: "text-amber-700",   badge: "bg-amber-50 text-amber-700 border-amber-200" },
+      { name: "rose",    bg: "bg-rose-500",    text: "text-rose-700",    badge: "bg-rose-50 text-rose-700 border-rose-200" },
+      { name: "indigo",  bg: "bg-indigo-500",  text: "text-indigo-700",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+    ];
 
-const YEAR = 2026;
-const CFG_KEY = "ic:fbConfig";
-const CACHE_PREFIX = "ic:cache:";
+    const TARGET_YEAR = 2026;
+    const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
-const COLORS = [
-  { name:"ブルー",     bg:"#dbeafe", text:"#1e40af", accent:"#3b82f6" },
-  { name:"グリーン",   bg:"#dcfce7", text:"#166534", accent:"#22c55e" },
-  { name:"パープル",   bg:"#ede9fe", text:"#5b21b6", accent:"#8b5cf6" },
-  { name:"オレンジ",   bg:"#ffedd5", text:"#9a3412", accent:"#f97316" },
-  { name:"ピンク",     bg:"#fce7f3", text:"#9d174d", accent:"#ec4899" },
-  { name:"ティール",   bg:"#ccfbf1", text:"#115e59", accent:"#14b8a6" },
-  { name:"イエロー",   bg:"#fef9c3", text:"#854d0e", accent:"#eab308" },
-  { name:"インディゴ", bg:"#e0e7ff", text:"#3730a3", accent:"#6366f1" },
-];
-const WEEKDAYS = ["日","月","火","水","木","金","土"];
-const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
+    // ==========================================
+    // SVG アイコン
+    // ==========================================
+    const IconCalendar = () => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
+      </svg>
+    );
+    const IconClipboard = () => (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+      </svg>
+    );
+    const IconPlus = () => (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12h14"/><path d="M12 5v14"/>
+      </svg>
+    );
+    const IconEye = () => (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+    );
+    const IconEyeOff = () => (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/>
+      </svg>
+    );
+    const IconTrash = () => (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+      </svg>
+    );
+    const IconAlert = () => (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>
+      </svg>
+    );
 
-let fbApp = null, auth = null, db = null, user = null, saveTimer = null;
-
-let state = {
-  view: "loading",   // loading | config | auth | app
-  companies: [],
-  month: 6,
-  inputName: "",
-  inputText: "",
-  sync: "",
-  authMsg: "",
-};
-
-// ---- 設定（Firebase config） ----
-function getConfig() {
-  if (FIREBASE_CONFIG) return FIREBASE_CONFIG;
-  try { const raw = localStorage.getItem(CFG_KEY); return raw ? JSON.parse(raw) : null; } catch(e) { return null; }
-}
-function parseConfig(text) {
-  const m = String(text).match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  try { return Function("return (" + m[0] + ")")(); }
-  catch(e) { try { return JSON.parse(m[0]); } catch(e2) { return null; } }
-}
-
-// ---- オフライン用キャッシュ ----
-function cacheLocal() {
-  if (!user) return;
-  try { localStorage.setItem(CACHE_PREFIX + user.uid, JSON.stringify(state.companies)); } catch(e) {}
-}
-function loadCache() {
-  if (!user) return [];
-  try { const raw = localStorage.getItem(CACHE_PREFIX + user.uid); const p = raw ? JSON.parse(raw) : []; return Array.isArray(p) ? p : []; } catch(e) { return []; }
-}
-
-// ---- 補助 ----
-function withTimeout(p, ms) {
-  return Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
-}
-function waitForFirebase(maxMs) {
-  return new Promise(resolve => {
-    const t0 = Date.now();
-    (function check() {
-      if (typeof firebase !== "undefined" && firebase.initializeApp && firebase.auth && firebase.firestore) return resolve(true);
-      if (Date.now() - t0 > maxMs) return resolve(false);
-      setTimeout(check, 100);
-    })();
-  });
-}
-
-// ============================================================
-//  起動・認証
-// ============================================================
-async function boot() {
-  try {
-    const cfg = getConfig();
-    if (!cfg) { state.view = "config"; render(); return; }
-    const ready = await waitForFirebase(8000);
-    if (!ready) { state.view = "config"; state.authMsg = "Firebase ライブラリの読み込みに失敗しました。通信環境を確認して再読込してください。"; render(); return; }
-    if (!fbApp) {
-      fbApp = firebase.initializeApp(cfg);
-      auth = firebase.auth();
-      db = firebase.firestore();
+    // ==========================================
+    // ユーティリティ
+    // ==========================================
+    function createDateObj(month, day) {
+      const mm = String(month).padStart(2, "0");
+      const dd = String(day).padStart(2, "0");
+      return { month, day, formatted: `${TARGET_YEAR}-${mm}-${dd}` };
     }
-    try { await auth.getRedirectResult(); } catch(e) {}
-    auth.onAuthStateChanged(u => { user = u; afterAuth(); });
-  } catch(err) {
-    state.view = "config";
-    state.authMsg = "初期化エラー: " + (err && err.message ? err.message : String(err)) + "（設定を確認してください）";
-    render();
-  }
-}
 
-async function afterAuth() {
-  if (!user) { state.view = "auth"; state.authMsg = ""; render(); return; }
-  state.view = "app";
-  state.companies = loadCache();
-  render();
-  await loadCloud();
-}
-
-async function loadCloud() {
-  if (!db || !user) return;
-  setSync("読込中…");
-  try {
-    const doc = await withTimeout(db.collection("schedules").doc(user.uid).get(), 10000);
-    const d = doc && doc.exists ? doc.data() : null;
-    state.companies = (d && Array.isArray(d.data)) ? d.data : [];
-    cacheLocal();
-    setSync("☁️ 同期済み");
-    render();
-  } catch(e) {
-    setSync("⚠️ 読込失敗（キャッシュ表示中）");
-  }
-}
-
-function scheduleSave() {
-  cacheLocal();
-  setSync("保存中…");
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveCloud, 500);
-}
-async function saveCloud() {
-  if (!db || !user) return;
-  try {
-    await withTimeout(db.collection("schedules").doc(user.uid).set({ data: state.companies, updatedAt: Date.now() }), 10000);
-    setSync("☁️ 同期済み");
-  } catch(e) {
-    setSync("⚠️ 保存失敗（オフライン？）");
-  }
-}
-function setSync(msg) {
-  state.sync = msg;
-  const el = document.getElementById("sync-badge");
-  if (el) el.textContent = msg;
-}
-
-async function doGoogleLogin() {
-  state.authMsg = "ログイン中…"; render();
-  try {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    await auth.signInWithPopup(provider);
-  } catch(e) {
-    const code = e && e.code ? e.code : "";
-    if (code === "auth/popup-blocked" || code === "auth/cancelled-popup-request" || code === "auth/popup-closed-by-user") {
-      try { await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()); return; }
-      catch(e2) { state.authMsg = "エラー: " + (e2.message || e2); render(); }
-    } else {
-      state.authMsg = "エラー: " + (e && e.message ? e.message : "ログインに失敗しました");
-      render();
+    function normalize(s) {
+      return String(s)
+        .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+        .replace(/／/g, "/")
+        .replace(/[〜～]/g, "~")
+        .replace(/[－ー―–—]/g, "-")
+        .replace(/　/g, " ");
     }
-  }
-}
-async function doLogout() {
-  try { await auth.signOut(); } catch(e) {}
-  user = null; state.view = "auth"; render();
-}
 
-// ============================================================
-//  解析ロジック
-// ============================================================
-function normalize(s) {
-  return String(s)
-    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
-    .replace(/／/g, "/")
-    .replace(/[〜～]/g, "~")
-    .replace(/[－ー―–—]/g, "-")
-    .replace(/　/g, " ");
-}
-function parseDates(text) {
-  text = normalize(text);
-  const results = [], seen = new Set();
-  const push = (m, d) => {
-    m = +m; d = +d;
-    if (!m || !d || m < 1 || m > 12 || d < 1 || d > 31) return;
-    const k = m + "-" + d; if (seen.has(k)) return;
-    seen.add(k); results.push({ month: m, day: d });
-  };
-  const pushRange = (m1, d1, m2, d2) => {
-    if (m1 < 1 || m1 > 12 || m2 < 1 || m2 > 12) return;
-    const start = new Date(YEAR, m1 - 1, d1), end = new Date(YEAR, m2 - 1, d2);
-    if (isNaN(start) || isNaN(end) || end < start) return;
-    let guard = 0;
-    for (let dt = new Date(start); dt <= end && guard < 400; dt.setDate(dt.getDate() + 1), guard++) push(dt.getMonth() + 1, dt.getDate());
-  };
-  text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})\/(\d{1,2})/g, (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
-  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/g, (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
-  text = text.replace(/(\d{1,2})\/(\d{1,2})\s*[~\-]\s*(\d{1,2})/g, (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
-  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*日?/g, (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
-  text = text.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g, (_, a, b) => { push(+a, +b); return " "; });
-  text = text.replace(/(\d{1,2})\/(\d{1,2})/g, (_, a, b) => { push(+a, +b); return " "; });
-  results.sort((a, b) => a.month - b.month || a.day - b.day);
-  return results;
-}
-function guessName(text) {
-  const line = text.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 0) || "";
-  const before = line.split(/(\d{1,2}\s*月|\d{1,2}\s*\/)/)[0].trim();
-  return (before || line).replace(/[、,：:].*/, "").trim();
-}
-function pickColor(used) { return COLORS.find(c => !used.includes(c.name)) || COLORS[used.length % COLORS.length]; }
-function uid() { return (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2); }
-function e(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+    function parseDatesFromText(text) {
+      const dates = [];
+      let cleanText = normalize(text);
 
-// ============================================================
-//  画面：初期設定（Firebase）
-// ============================================================
-function renderConfig() {
-  let cur = "";
-  try { cur = localStorage.getItem(CFG_KEY) || ""; } catch(e) {}
-  return `
-  <div class="min-h-screen flex items-center justify-center px-4">
-    <div class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h1 class="text-lg font-black text-slate-900 mb-1">初期設定（最初の1回だけ）</h1>
-      <p class="text-xs text-slate-500 mb-3">⚠️ ここは<b>ログイン画面ではありません</b>。Firebase で発行される <b>firebaseConfig</b>（apiKey などの設定のかたまり）をまるごと貼り付けてください。Google ログインは次の画面です。</p>
-      ${state.authMsg ? `<p class="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">${e(state.authMsg)}</p>` : ""}
-      <label class="block text-xs font-semibold text-slate-500 mb-1">firebaseConfig（{ ... } をまるごと）</label>
-      <textarea id="cfg-json" rows="9" placeholder='{
-  "apiKey": "AIza...",
-  "authDomain": "xxxx.firebaseapp.com",
-  "projectId": "xxxx",
-  "appId": "1:...:web:..."
-}'
-        class="w-full mb-4 rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono outline-none focus:border-indigo-500">${e(cur)}</textarea>
-      <button id="cfg-save" class="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">保存して続ける</button>
-    </div>
-  </div>`;
-}
+      // 曜日表記を除去（数字の誤認防止）
+      cleanText = cleanText.replace(/[(（][日一月火水木金土][)）]/g, "");
 
-// ============================================================
-//  画面：ログイン（Google）
-// ============================================================
-function renderAuth() {
-  return `
-  <div class="min-h-screen flex items-center justify-center px-4">
-    <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-center">
-      <div class="flex items-center justify-center gap-2 mb-4">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-xl text-white">📅</div>
-        <h1 class="text-base font-black text-slate-900">インターン日程かぶりチェッカー</h1>
-      </div>
-      <p class="text-sm text-slate-600 mb-5">Google アカウントでログインすると、<br>どの端末でも同じデータが使えます。</p>
-      ${state.authMsg ? `<p class="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">${e(state.authMsg)}</p>` : ""}
-      <button id="btn-google" class="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
-        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c2.8 0 5.4 1.1 7.3 2.8l5.7-5.7C33.6 6.1 29.1 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 34.9 26.7 35 24 35c-5.3 0-9.7-2.6-11.3-7l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.1 5.6l6.2 5.2C39.9 36.3 44 30.7 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
-        Google でログイン
-      </button>
-      <p class="mt-4"><button id="cfg-open" class="text-[11px] text-slate-400 hover:underline">接続設定を変更</button></p>
-    </div>
-  </div>`;
-}
+      const seen = new Set();
+      const push = (month, day) => {
+        month = +month; day = +day;
+        if (!month || !day || month < 1 || month > 12 || day < 1 || day > 31) return;
+        const k = month + "-" + day;
+        if (seen.has(k)) return;
+        seen.add(k);
+        dates.push(createDateObj(month, day));
+      };
+      const pushRange = (m1, d1, m2, d2) => {
+        if (m1 < 1 || m1 > 12 || m2 < 1 || m2 > 12) return;
+        const start = new Date(TARGET_YEAR, m1 - 1, d1);
+        const end = new Date(TARGET_YEAR, m2 - 1, d2);
+        if (isNaN(start) || isNaN(end) || end < start) return;
+        let guard = 0;
+        for (let dt = new Date(start); dt <= end && guard < 400; dt.setDate(dt.getDate() + 1), guard++) {
+          push(dt.getMonth() + 1, dt.getDate());
+        }
+      };
 
-// ============================================================
-//  画面：アプリ本体
-// ============================================================
-function renderAccountBar() {
-  const name = user ? (user.displayName || user.email || "ログイン中") : "";
-  const photo = user && user.photoURL ? `<img src="${e(user.photoURL)}" alt="" class="h-6 w-6 rounded-full" referrerpolicy="no-referrer">` : "👤";
-  return `
-  <div class="border-b border-slate-200 bg-white">
-    <div class="mx-auto max-w-7xl px-5 py-2.5 flex flex-wrap items-center gap-2">
-      <span class="flex items-center gap-1.5 text-xs font-bold text-slate-600">${photo} ${e(name)}</span>
-      <span id="sync-badge" class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">${e(state.sync)}</span>
-      <div class="ml-auto flex items-center gap-2">
-        <button id="btn-reload" class="text-xs text-slate-400 hover:text-indigo-600">再読込</button>
-        <button id="btn-logout" class="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600 hover:bg-slate-50">ログアウト</button>
-      </div>
-    </div>
-  </div>`;
-}
-function renderHeader() {
-  const vis = state.companies.filter(c => c.visible);
-  const map = new Map();
-  vis.forEach(c => c.dates.forEach(d => { const k = d.month + "-" + d.day; map.set(k, (map.get(k) || 0) + 1); }));
-  const total = [...map.values()].filter(n => n >= 2).length;
-  const badge = total > 0
-    ? `<span class="flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-sm font-bold text-red-700">⚠️ 重複 ${total} 日</span>`
-    : `<span class="flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-700">✅ 重複なし</span>`;
-  return `
-  <header class="border-b border-slate-200 bg-white">
-    <div class="mx-auto flex max-w-7xl items-center gap-3 px-5 py-4">
-      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-xl text-white">📅</div>
-      <div>
-        <h1 class="text-lg font-black text-slate-900">インターン日程かぶりチェッカー</h1>
-        <p class="text-xs text-slate-500">${YEAR}年の重複を一目で確認 ・ どの端末でも同じデータ</p>
-      </div>
-      <div class="ml-auto">${badge}</div>
-    </div>
-  </header>`;
-}
-function renderFormDynamic() {
-  const preview = parseDates(state.inputText);
-  const ename = e(state.inputName.trim() || guessName(state.inputText));
-  const previewHtml = state.inputText.trim() === "" ? "" : `
-    <div class="rounded-lg bg-slate-50 p-3">
-      <div class="text-xs font-semibold text-slate-500 mb-1.5">✨ 抽出プレビュー${ename ? ` <span class="text-indigo-600">／ ${ename}</span>` : ""}</div>
-      ${preview.length === 0
-        ? `<p class="text-xs text-slate-400">日付が見つかりません（「7月21日」や「8/4」「7/24~26」の形式で入力してください）</p>`
-        : preview.map(d => `<span class="date-chip">${d.month}/${d.day}</span>`).join("")}
-    </div>`;
-  return `
-    ${previewHtml}
-    <button id="btn-add" ${preview.length === 0 ? "disabled" : ""}
-      class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 transition">
-      ＋ カレンダーに追加${preview.length > 0 ? `（${preview.length}件）` : ""}
-    </button>`;
-}
-function renderInputForm() {
-  return `
-  <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div class="flex items-center gap-2 mb-4">
-      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-lg">+</div>
-      <h2 class="text-base font-bold text-slate-800">日程を追加</h2>
-    </div>
-    <div class="space-y-3">
-      <div>
-        <label class="block text-xs font-semibold text-slate-500 mb-1">企業名（空欄なら1行目から自動取得）</label>
-        <input id="inp-name" type="text" value="${e(state.inputName)}" placeholder="例: 関西電力"
-          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-slate-500 mb-1">日程テキスト（コピペでも手入力でもOK・全角/半角可）</label>
-        <textarea id="inp-text" rows="6" placeholder="例:&#10;関西電力 7/21、8/4&#10;7/24~26（範囲もOK→24・25・26）&#10;7月30日〜8月2日&#10;A社 8/4, 8/5, 9/1"
-          class="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm leading-relaxed outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">${e(state.inputText)}</textarea>
-      </div>
-      <div id="form-dynamic" class="space-y-3">${renderFormDynamic()}</div>
-    </div>
-  </div>`;
-}
-function renderSidebar() {
-  const cs = state.companies;
-  const list = cs.length === 0
-    ? `<p class="rounded-lg bg-slate-50 px-3 py-6 text-center text-xs text-slate-400">まだ企業が登録されていません。<br>左のフォームから追加してください。</p>`
-    : cs.map(c => `
-      <li class="rounded-xl border border-slate-200 p-3" style="opacity:${c.visible ? 1 : 0.55}">
-        <div class="flex items-center gap-2">
-          <span class="h-3.5 w-3.5 rounded-full shrink-0" style="background:${c.color.accent}"></span>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-bold text-slate-800 truncate">${e(c.name)}</p>
-            <p class="text-xs text-slate-400">${c.dates.length}日程</p>
-          </div>
-          <button class="btn-toggle rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" data-id="${c.id}" title="${c.visible ? "非表示" : "表示"}">${c.visible ? svgEye() : svgEyeOff()}</button>
-          <button class="btn-remove rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" data-id="${c.id}" title="削除">${svgTrash()}</button>
+      // 月またぎ期間「7/30~8/3」「7月30日〜8月3日」
+      cleanText = cleanText.replace(/(\d{1,2})\s*(?:\/|月)\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*(?:\/|月)\s*(\d{1,2})\s*日?/g,
+        (_, a, b, c, d) => { pushRange(+a, +b, +c, +d); return " "; });
+
+      // 同一月内の期間「7/24~30」「8月1日〜5日」
+      cleanText = cleanText.replace(/(\d{1,2})\s*(?:\/|月)\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*日?/g,
+        (_, a, b, c) => { pushRange(+a, +b, +a, +c); return " "; });
+
+      // 単発「7月21日」
+      cleanText = cleanText.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g,
+        (_, a, b) => { push(+a, +b); return " "; });
+
+      // 単発「8/4」
+      cleanText = cleanText.replace(/(?<!\d)(\d{1,2})\s*\/\s*(\d{1,2})(?!\d)/g,
+        (_, a, b) => { push(+a, +b); return " "; });
+
+      return dates.sort((a, b) => a.month - b.month || a.day - b.day);
+    }
+
+    function guessName(text) {
+      const line = text.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 0) || "";
+      const before = line.split(/(\d{1,2}\s*月|\d{1,2}\s*\/)/)[0].trim();
+      return (before || line).replace(/[、,：:].*/, "").trim().slice(0, 20);
+    }
+
+    function uid() {
+      return (typeof crypto !== "undefined" && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : Date.now() + "-" + Math.random().toString(36).slice(2);
+    }
+
+    // ==========================================
+    // メインコンポーネント
+    // ==========================================
+    function InternScheduler() {
+      const [schedules, setSchedules] = useState([]);
+      const [companyInput, setCompanyInput] = useState("");
+      const [textInput, setTextInput] = useState("");
+      const [currentMonth, setCurrentMonth] = useState(6);
+      const [isMounted, setIsMounted] = useState(false);
+
+      useEffect(() => {
+        setIsMounted(true);
+        try {
+          const saved = localStorage.getItem("intern_schedules_v2");
+          if (saved) setSchedules(JSON.parse(saved));
+        } catch (e) {}
+      }, []);
+
+      useEffect(() => {
+        if (isMounted) {
+          try { localStorage.setItem("intern_schedules_v2", JSON.stringify(schedules)); } catch (e) {}
+        }
+      }, [schedules, isMounted]);
+
+      // テキスト1行目から企業名を推測
+      useEffect(() => {
+        if (textInput.trim() && !companyInput) {
+          const guessed = guessName(textInput);
+          if (guessed) setCompanyInput(guessed);
+        }
+      }, [textInput]);
+
+      const handleAddSchedule = (e) => {
+        e.preventDefault();
+        if (!textInput.trim()) return;
+
+        const finalName = companyInput.trim() || `企業 ${schedules.length + 1}`;
+        const extractedDates = parseDatesFromText(textInput);
+
+        if (extractedDates.length === 0) {
+          alert("日付が検出されませんでした。「7月21日」「8/4」「7/24~30」などの形式で入力してください。");
+          return;
+        }
+
+        const usedColors = schedules.map(s => s.color);
+        const color = COLOR_PALETTES.find(p => !usedColors.includes(p.name)) || COLOR_PALETTES[schedules.length % COLOR_PALETTES.length];
+
+        setSchedules(prev => [...prev, {
+          id: uid(),
+          name: finalName,
+          rawText: textInput,
+          dates: extractedDates,
+          color: color.name,
+          visible: true,
+        }]);
+        setCompanyInput("");
+        setTextInput("");
+        if (extractedDates.length > 0) setCurrentMonth(extractedDates[0].month);
+      };
+
+      const toggleVisibility = (id) =>
+        setSchedules(prev => prev.map(s => s.id === id ? { ...s, visible: !s.visible } : s));
+
+      const deleteSchedule = (id) =>
+        setSchedules(prev => prev.filter(s => s.id !== id));
+
+      // デモデータ
+      const loadDemoData = () => {
+        setSchedules([
+          { id: "demo-1", name: "関西電力", rawText: "", dates: [createDateObj(7,21), createDateObj(8,4), createDateObj(9,8)], color: "blue", visible: true },
+          { id: "demo-2", name: "A社(5days)", rawText: "", dates: [createDateObj(7,28), createDateObj(7,29), createDateObj(7,30), createDateObj(7,31), createDateObj(8,1)], color: "emerald", visible: true },
+          { id: "demo-3", name: "サイバー系B社", rawText: "", dates: [createDateObj(7,30), createDateObj(8,4)], color: "violet", visible: true },
+        ]);
+        setCurrentMonth(7);
+      };
+
+      // カレンダー計算
+      const firstDayOfWeek = new Date(TARGET_YEAR, currentMonth - 1, 1).getDay();
+      const totalDays = new Date(TARGET_YEAR, currentMonth, 0).getDate();
+
+      const dateMap = {};
+      schedules.forEach(comp => {
+        if (!comp.visible) return;
+        comp.dates.forEach(d => {
+          if (!dateMap[d.formatted]) dateMap[d.formatted] = [];
+          dateMap[d.formatted].push({ company: comp, date: d });
+        });
+      });
+
+      if (!isMounted) return <div className="p-8 text-center text-slate-500">Loading…</div>;
+
+      return (
+        <div className="min-h-screen bg-slate-50 text-slate-800" style={{fontFamily: "system-ui, -apple-system, sans-serif"}}>
+          {/* ヘッダー */}
+          <header className="bg-white border-b border-slate-200 sticky top-0 z-10 px-6 py-4 shadow-sm">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-600 rounded-lg text-white">
+                  <IconCalendar />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900">インターン日程バッティングチェッカー</h1>
+                  <p className="text-xs text-slate-500 font-medium">複数企業の候補日テキストを一括抽出・重複可視化 ({TARGET_YEAR}年専用)</p>
+                </div>
+              </div>
+              {schedules.length === 0 && (
+                <button
+                  onClick={loadDemoData}
+                  className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-md font-medium border border-slate-200 transition"
+                >
+                  💡 デモデータを読み込む
+                </button>
+              )}
+            </div>
+          </header>
+
+          <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            {/* 左サイドバー */}
+            <div className="lg:col-span-4 flex flex-col gap-6">
+
+              {/* 入力フォーム */}
+              <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h2 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  <span className="text-indigo-500"><IconClipboard /></span>
+                  募集テキストから日程を抽出
+                </h2>
+                <form onSubmit={handleAddSchedule} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">企業名・イベント名（任意）</label>
+                    <input
+                      type="text"
+                      placeholder="例: 関西電力 (空欄なら1行目を自動判定)"
+                      value={companyInput}
+                      onChange={(e) => setCompanyInput(e.target.value)}
+                      className="w-full text-sm px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">案内テキスト（ここにペースト）</label>
+                    <textarea
+                      rows={5}
+                      required
+                      placeholder={"例：\n第1回:7月24日〜30日\n月またぎの 7/30~8/3 も自動展開します！\nA社 8/4, 8/5, 9/1"}
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      className="w-full text-sm px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 font-mono resize-y"
+                    />
+                  </div>
+                  {/* プレビュー */}
+                  {textInput.trim() && (() => {
+                    const preview = parseDatesFromText(textInput);
+                    return (
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+                        <div className="text-xs font-semibold text-slate-500 mb-1.5">
+                          ✨ 抽出プレビュー
+                          {(companyInput || guessName(textInput)) && (
+                            <span className="text-indigo-600"> ／ {companyInput || guessName(textInput)}</span>
+                          )}
+                        </div>
+                        {preview.length === 0
+                          ? <p className="text-xs text-slate-400">日付が見つかりません（「7月21日」や「8/4」「7/24~26」の形式で入力してください）</p>
+                          : <div className="flex flex-wrap gap-1">
+                              {preview.map((d, i) => (
+                                <span key={i} className="text-xs px-2 py-0.5 rounded bg-white border border-slate-200 font-mono text-slate-700">
+                                  {d.month}/{d.day}
+                                </span>
+                              ))}
+                            </div>
+                        }
+                      </div>
+                    );
+                  })()}
+                  <button
+                    type="submit"
+                    className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-lg shadow-sm transition"
+                  >
+                    <IconPlus />
+                    日程を解析して追加
+                    {textInput.trim() && parseDatesFromText(textInput).length > 0 &&
+                      <span className="text-indigo-200 text-xs">（{parseDatesFromText(textInput).length}件）</span>
+                    }
+                  </button>
+                </form>
+              </section>
+
+              {/* 登録済み一覧 */}
+              <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex-1">
+                <h2 className="text-sm font-semibold text-slate-900 mb-3 flex items-center justify-between">
+                  <span>登録済みのターゲット ({schedules.length})</span>
+                  {schedules.length > 0 && (
+                    <button onClick={() => setSchedules([])} className="text-xs text-rose-500 hover:underline">すべてクリア</button>
+                  )}
+                </h2>
+
+                {schedules.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50">
+                    <p className="text-xs">登録されたインターン情報はありません。</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+                    {schedules.map((comp) => {
+                      const palette = COLOR_PALETTES.find(p => p.name === comp.color) || COLOR_PALETTES[0];
+                      return (
+                        <div
+                          key={comp.id}
+                          className={`p-3 border rounded-lg flex items-start justify-between transition-all ${
+                            comp.visible ? "bg-white border-slate-200" : "bg-slate-50 border-slate-100 opacity-60"
+                          }`}
+                        >
+                          <div className="flex gap-2.5 items-start">
+                            <span className={`w-3 h-3 rounded-full mt-1.5 shrink-0 ${palette.bg}`} />
+                            <div>
+                              <h3 className="text-sm font-bold text-slate-800 line-clamp-1">{comp.name}</h3>
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {comp.dates.map((d, idx) => (
+                                  <span key={idx} className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${palette.badge}`}>
+                                    {d.month}/{d.day}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                            <button onClick={() => toggleVisibility(comp.id)} className="p-1 text-slate-400 hover:text-slate-600 rounded transition">
+                              {comp.visible ? <IconEye /> : <IconEyeOff />}
+                            </button>
+                            <button onClick={() => deleteSchedule(comp.id)} className="p-1 text-slate-400 hover:text-rose-600 rounded transition">
+                              <IconTrash />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* カレンダー */}
+            <div className="lg:col-span-8 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-extrabold text-slate-900 font-mono">{TARGET_YEAR}年</span>
+                  <span className="text-2xl font-black text-indigo-600 font-mono">{currentMonth}月</span>
+                </div>
+                <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-lg">
+                  {[6, 7, 8, 9, 10, 11, 12].map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setCurrentMonth(m)}
+                      className={`px-3 py-1 text-xs font-bold rounded-md font-mono transition-all ${
+                        currentMonth === m ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      {m}月
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1.5 flex-1" style={{minHeight: "480px"}}>
+                {WEEKDAYS.map((day, idx) => (
+                  <div key={idx} className={`text-center text-xs font-bold py-2 rounded bg-slate-50 border border-slate-100 ${
+                    idx === 0 ? "text-rose-500" : idx === 6 ? "text-blue-500" : "text-slate-500"
+                  }`}>
+                    {day}
+                  </div>
+                ))}
+
+                {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
+                  <div key={`empty-${idx}`} className="bg-slate-50 rounded-lg border border-slate-100 min-h-[70px]" />
+                ))}
+
+                {Array.from({ length: totalDays }).map((_, idx) => {
+                  const dayNum = idx + 1;
+                  const mm = String(currentMonth).padStart(2, "0");
+                  const dd = String(dayNum).padStart(2, "0");
+                  const dateStr = `${TARGET_YEAR}-${mm}-${dd}`;
+                  const dayEvents = dateMap[dateStr] || [];
+                  const eventCount = dayEvents.length;
+                  const isConflict = eventCount >= 2;
+
+                  let cellBg = "bg-white hover:bg-slate-50";
+                  let cellBorder = "border-slate-200";
+                  if (isConflict) {
+                    cellBg = eventCount === 2 ? "bg-rose-50" : "bg-rose-100";
+                    cellBorder = "border-rose-300 ring-1 ring-rose-200";
+                  }
+
+                  return (
+                    <div key={`day-${dayNum}`} className={`p-1.5 border rounded-lg flex flex-col justify-between transition-all min-h-[75px] ${cellBg} ${cellBorder}`}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className={`text-xs font-bold font-mono ${isConflict ? "text-rose-700" : "text-slate-700"}`}>{dayNum}</span>
+                        {isConflict && (
+                          <span className={`text-[9px] px-1 rounded font-black flex items-center gap-0.5 tracking-tight ${
+                            eventCount === 2 ? "bg-rose-200 text-rose-800" : "bg-rose-600 text-white"
+                          }`}>
+                            <IconAlert />{eventCount}社重複
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-0.5 overflow-y-auto max-h-[50px] custom-scrollbar">
+                        {dayEvents.map((ev, eIdx) => {
+                          const palette = COLOR_PALETTES.find(p => p.name === ev.company.color) || COLOR_PALETTES[0];
+                          return (
+                            <div
+                              key={eIdx}
+                              className={`text-[10px] px-1 py-0.5 rounded font-medium truncate border ${palette.badge}`}
+                              title={ev.company.name}
+                            >
+                              {ev.company.name}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-4 text-xs text-slate-500">
+                <div className="flex items-center gap-1.5"><span className="w-3 h-3 bg-white border border-slate-200 rounded inline-block" /><span>予定なし / 1社のみ</span></div>
+                <div className="flex items-center gap-1.5"><span className="w-3 h-3 bg-rose-50 border border-rose-300 rounded inline-block" /><span>⚠️ 2社重複 (要注意)</span></div>
+                <div className="flex items-center gap-1.5"><span className="w-3 h-3 bg-rose-100 border border-rose-400 rounded inline-block" /><span>🚨 3社以上重複 (激戦区)</span></div>
+              </div>
+            </div>
+          </main>
         </div>
-        <div class="mt-2 flex flex-wrap">
-          ${c.dates.map(d => `<span class="company-tag" style="background:${c.color.bg};color:${c.color.text}">${d.month}/${d.day}</span>`).join("")}
-        </div>
-      </li>`).join("");
-  return `
-  <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-2">
-        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-white">🏢</div>
-        <h2 class="text-base font-bold text-slate-800">登録企業</h2>
-      </div>
-      <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">${cs.length}社</span>
-    </div>
-    <ul class="space-y-2">${list}</ul>
-  </div>`;
-}
-function renderCalendar() {
-  const vis = state.companies.filter(c => c.visible);
-  const y = YEAR, mo = state.month;
-  const firstDay = new Date(y, mo - 1, 1).getDay();
-  const daysInMonth = new Date(y, mo, 0).getDate();
-  let conflictCount = 0;
-  const cells = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    const events = vis.filter(c => c.dates.some(dt => dt.month === mo && dt.day === d)).map(c => ({ name: c.name, bg: c.color.bg, text: c.color.text }));
-    if (events.length >= 2) conflictCount++;
-    cells.push({ day: d, events });
-  }
-  while (cells.length % 7 !== 0) cells.push(null);
-  const conflictBadge = conflictCount > 0 ? `<span class="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">⚠️ この月 ${conflictCount} 日の重複</span>` : "";
-  const monthOpts = MONTHS.map(m => `<option value="${m}" ${m === mo ? "selected" : ""}>${m}月</option>`).join("");
-  const cellsHtml = cells.map((cell, idx) => {
-    if (!cell) return `<div class="min-h-[88px]"></div>`;
-    const wd = idx % 7, evts = cell.events;
-    const cellClass = evts.length >= 3 ? "cell-conflict3" : evts.length >= 2 ? "cell-conflict2" : "cell-normal";
-    const dayColor = wd === 0 ? "color:#ef4444" : wd === 6 ? "color:#3b82f6" : "color:#64748b";
-    const badge = evts.length >= 2 ? `<span class="badge-conflict">⚠️ ${evts.length}社</span>` : "";
-    const tags = evts.map(ev => `<div class="truncate rounded px-1.5 py-0.5 text-[11px] font-semibold" style="background:${ev.bg};color:${ev.text}" title="${e(ev.name)}">${e(ev.name)}</div>`).join("");
-    return `
-    <div class="min-h-[88px] rounded-xl p-1.5 ${cellClass}">
-      <div class="flex items-center justify-between mb-1"><span class="text-xs font-bold" style="${dayColor}">${cell.day}</span>${badge}</div>
-      <div class="space-y-0.5">${tags}</div>
-    </div>`;
-  }).join("");
-  return `
-  <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-      <div class="flex items-center gap-3"><h2 class="text-xl font-black text-slate-800">${y}年 ${mo}月</h2>${conflictBadge}</div>
-      <div class="flex items-center gap-1.5">
-        <button id="btn-prev" class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50">◀</button>
-        <select id="sel-month" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-bold text-slate-700 outline-none">${monthOpts}</select>
-        <button id="btn-next" class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50">▶</button>
-      </div>
-    </div>
-    <div class="grid grid-cols-7 gap-1 mb-1">
-      ${WEEKDAYS.map((w, i) => `<div class="py-1 text-center text-xs font-bold ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-slate-400"}">${w}</div>`).join("")}
-    </div>
-    <div class="grid grid-cols-7 gap-1">${cellsHtml}</div>
-  </div>
-  <div class="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs text-slate-500">
-    <span class="font-semibold text-slate-600">凡例:</span>
-    <span class="flex items-center gap-1.5"><span style="display:inline-block;width:20px;height:12px;border-radius:3px;background:#fff1f2;box-shadow:0 0 0 1px #fecaca"></span>2社重複</span>
-    <span class="flex items-center gap-1.5"><span style="display:inline-block;width:20px;height:12px;border-radius:3px;background:#fee2e2;box-shadow:0 0 0 2px #fca5a5"></span>3社以上重複</span>
-    <span class="flex items-center gap-1.5"><span class="badge-conflict">⚠️ N社</span> 重複している日</span>
-  </div>`;
-}
-function svgEye() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`; }
-function svgEyeOff() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/></svg>`; }
-function svgTrash() { return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`; }
+      );
+    }
 
-function renderApp() {
-  return `
-    ${renderAccountBar()}
-    ${renderHeader()}
-    <div class="mx-auto max-w-7xl px-5 py-5">
-      <div class="grid grid-cols-1 gap-5 lg:grid-cols-[340px_1fr]">
-        <div class="space-y-5">${renderInputForm()}${renderSidebar()}</div>
-        <div class="space-y-4">${renderCalendar()}</div>
-      </div>
-    </div>`;
-}
-
-// ============================================================
-//  描画
-// ============================================================
-function render() {
-  let html = "";
-  if (state.view === "loading") html = `<div class="min-h-screen flex items-center justify-center text-slate-400 text-sm">読み込み中…</div>`;
-  else if (state.view === "config") html = renderConfig();
-  else if (state.view === "auth") html = renderAuth();
-  else html = renderApp();
-  document.getElementById("app").innerHTML = html;
-  bindEvents();
-}
-function updateFormDynamic() {
-  const box = document.getElementById("form-dynamic");
-  if (!box) return;
-  box.innerHTML = renderFormDynamic();
-  bindAddButton();
-}
-function bindAddButton() {
-  const btnAdd = document.getElementById("btn-add");
-  if (btnAdd) btnAdd.addEventListener("click", function() {
-    const dates = parseDates(state.inputText);
-    if (!dates.length) return;
-    const name = state.inputName.trim() || guessName(state.inputText) || "名称未設定";
-    const color = pickColor(state.companies.map(c => c.color.name));
-    state.companies.push({ id: uid(), name, color, dates, visible: true, rawText: state.inputText });
-    if (dates.length) state.month = dates[0].month;
-    state.inputName = ""; state.inputText = "";
-    scheduleSave(); render();
-  });
-}
-function bindEvents() {
-  const cfgSave = document.getElementById("cfg-save");
-  if (cfgSave) cfgSave.addEventListener("click", () => {
-    const txt = (document.getElementById("cfg-json") || {}).value || "";
-    const parsed = parseConfig(txt);
-    if (!parsed || !parsed.apiKey || !parsed.projectId) { state.authMsg = "firebaseConfig を正しく貼り付けてください（apiKey と projectId が必要です）。"; render(); return; }
-    try { localStorage.setItem(CFG_KEY, JSON.stringify(parsed)); } catch(e) {}
-    state.authMsg = ""; state.view = "loading"; render(); boot();
-  });
-
-  const btnGoogle = document.getElementById("btn-google");
-  if (btnGoogle) btnGoogle.addEventListener("click", doGoogleLogin);
-  const cfgOpen = document.getElementById("cfg-open");
-  if (cfgOpen) cfgOpen.addEventListener("click", () => { state.view = "config"; render(); });
-
-  const btnLogout = document.getElementById("btn-logout");
-  if (btnLogout) btnLogout.addEventListener("click", doLogout);
-  const btnReload = document.getElementById("btn-reload");
-  if (btnReload) btnReload.addEventListener("click", loadCloud);
-
-  const inpName = document.getElementById("inp-name");
-  const inpText = document.getElementById("inp-text");
-  if (inpName) inpName.addEventListener("input", function() { state.inputName = this.value; updateFormDynamic(); });
-  if (inpText) inpText.addEventListener("input", function() { state.inputText = this.value; updateFormDynamic(); });
-  bindAddButton();
-
-  const btnPrev = document.getElementById("btn-prev");
-  const btnNext = document.getElementById("btn-next");
-  const selMonth = document.getElementById("sel-month");
-  if (btnPrev) btnPrev.addEventListener("click", () => { if (state.month > 1) { state.month--; render(); } });
-  if (btnNext) btnNext.addEventListener("click", () => { if (state.month < 12) { state.month++; render(); } });
-  if (selMonth) selMonth.addEventListener("change", function() { state.month = +this.value; render(); });
-
-  document.querySelectorAll(".btn-toggle").forEach(btn => btn.addEventListener("click", () => {
-    const id = btn.dataset.id;
-    state.companies = state.companies.map(c => c.id === id ? { ...c, visible: !c.visible } : c);
-    scheduleSave(); render();
-  }));
-  document.querySelectorAll(".btn-remove").forEach(btn => btn.addEventListener("click", () => {
-    const id = btn.dataset.id;
-    state.companies = state.companies.filter(c => c.id !== id);
-    scheduleSave(); render();
-  }));
-}
-
-// ============================================================
-//  起動
-// ============================================================
-render();
-boot();
-</script>
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<InternScheduler />);
+  </script>
 </body>
 </html>
