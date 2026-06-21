@@ -175,7 +175,12 @@
         }
       };
 
-      // 年付き単発「2027/3/1」「2027年3月1日」
+      // 年月付き・区切り複数日「2026年9月3日(木)・4日(金)」「2026年9月16日・17（木）・18日」
+      // ※年付き単発より先に実行して「2026年9月3日」を食い潰す前に複数日をまとめて取る
+      cleanText = cleanText.replace(/(20\d{2})\s*年\s*(\d{1,2})\s*月\s*((?:\d{1,2}\s*日?\s*[・,、]\s*)*\d{1,2}\s*日?)/g,
+        (_, y, m, daysStr) => { (daysStr.match(/\d{1,2}/g) || []).forEach(d => push(+m, +d, +y)); return " "; });
+
+      // 年付き単発「2027/3/1」「2027年3月1日」（上記で消化されなかった残り）
       cleanText = cleanText.replace(/(20\d{2})\s*[\/年]\s*(\d{1,2})\s*[\/月]\s*(\d{1,2})\s*日?/g,
         (_, y, a, b) => { push(+a, +b, +y); return " "; });
 
@@ -187,7 +192,11 @@
       cleanText = cleanText.replace(/(\d{1,2})\s*(?:\/|月)\s*(\d{1,2})\s*日?\s*[~\-]\s*(\d{1,2})\s*日?/g,
         (_, a, b, c) => { const y = inferYear(+a); pushRange(y, +a, +b, y, +a, +c); return " "; });
 
-      // 単発「7月21日」
+      // 月付き・区切り複数日「9月3日・4日(金)・5日」（範囲パターンを消化した後に実行）
+      cleanText = cleanText.replace(/(\d{1,2})\s*月\s*((?:\d{1,2}\s*日?\s*[・,、]\s*)*\d{1,2}\s*日?)/g,
+        (_, m, daysStr) => { const y = inferYear(+m); (daysStr.match(/\d{1,2}/g) || []).forEach(d => push(+m, +d, y)); return " "; });
+
+      // 単発「7月21日」（上記に引っかからなかった残り）
       cleanText = cleanText.replace(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/g,
         (_, a, b) => { push(+a, +b); return " "; });
 
