@@ -175,6 +175,16 @@
         }
       };
 
+      // 中点・読点区切りの複数日「9月3日・4日」「2026年9月16日・17・18日」（同一月内）
+      cleanText = cleanText.replace(
+        /(?:(20\d{2})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日?((?:\s*[・,、]\s*\d{1,2}(?!\s*月)\s*日?)+)/g,
+        (_, y, m, d1, rest) => {
+          const year = y ? +y : inferYear(+m);
+          push(+m, +d1, year);
+          rest.replace(/(\d{1,2})/g, (__, dd) => { push(+m, +dd, year); return ""; });
+          return " ";
+        });
+
       // 年付き単発「2027/3/1」「2027年3月1日」
       cleanText = cleanText.replace(/(20\d{2})\s*[\/年]\s*(\d{1,2})\s*[\/月]\s*(\d{1,2})\s*日?/g,
         (_, y, a, b) => { push(+a, +b, +y); return " "; });
