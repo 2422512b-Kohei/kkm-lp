@@ -57,6 +57,11 @@
     .reveal.shown { opacity: 1; transform: translateY(0); }
     /* スマホ下部のフローティングCTA分の余白 */
     @media (max-width: 768px) { body { padding-bottom: 80px; } }
+    /* アンカー移動時にヘッダーへ隠れないように */
+    section[id] { scroll-margin-top: 3.5rem; }
+    /* サイドドロワー */
+    #drawer { transition: transform 0.3s ease; }
+    #drawer-overlay { transition: opacity 0.3s ease; }
   </style>
 </head>
 
@@ -69,11 +74,51 @@
         <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gold text-navy font-black">K</span>
         <span class="text-base sm:text-lg">KKM<span class="text-gold">.</span></span>
       </a>
-      <a href="https://lin.ee/ny4sXSw" target="_blank" rel="noopener" class="hidden md:inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-navy font-bold text-sm px-4 py-2 rounded-full transition">
-        <i class="fa-brands fa-line text-base"></i> 無料相談
-      </a>
+      <div class="flex items-center gap-2">
+        <!-- PC用インラインナビ -->
+        <nav class="hidden lg:flex items-center gap-5 text-sm font-medium text-white/85 mr-2">
+          <a href="#features" class="hover:text-gold transition">サービスの特徴</a>
+          <a href="#consult" class="hover:text-gold transition">教育相談</a>
+          <a href="#standards" class="hover:text-gold transition">認定基準</a>
+          <a href="#pricing" class="hover:text-gold transition">料金</a>
+          <a href="#flow" class="hover:text-gold transition">ご利用の流れ</a>
+        </nav>
+        <a href="https://lin.ee/ny4sXSw" target="_blank" rel="noopener" class="hidden md:inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-navy font-bold text-sm px-4 py-2 rounded-full transition">
+          <i class="fa-brands fa-line text-base"></i> 無料相談
+        </a>
+        <!-- ハンバーガー -->
+        <button id="menu-open" aria-label="メニューを開く" class="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg text-white hover:bg-white/10 transition">
+          <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+      </div>
     </div>
   </header>
+
+  <!-- ===== サイドドロワーメニュー ===== -->
+  <div id="drawer-overlay" class="fixed inset-0 z-50 bg-black/50 opacity-0 pointer-events-none" aria-hidden="true"></div>
+  <aside id="drawer" class="fixed top-0 right-0 z-50 h-full w-72 max-w-[80%] bg-navy text-white shadow-2xl translate-x-full" aria-label="メニュー">
+    <div class="flex items-center justify-between px-5 h-14 border-b border-white/10">
+      <span class="font-round font-bold tracking-wide">メニュー</span>
+      <button id="menu-close" aria-label="メニューを閉じる" class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-white hover:bg-white/10 transition">
+        <i class="fa-solid fa-xmark text-xl"></i>
+      </button>
+    </div>
+    <nav class="px-3 py-4">
+      <a href="#hero" class="drawer-link flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/10 transition"><i class="fa-solid fa-house text-gold w-5 text-center"></i> トップ</a>
+      <a href="#worries" class="drawer-link flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/10 transition"><i class="fa-solid fa-comment-dots text-gold w-5 text-center"></i> お悩み</a>
+      <a href="#features" class="drawer-link flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/10 transition"><i class="fa-solid fa-star text-gold w-5 text-center"></i> サービスの特徴</a>
+      <a href="#consult" class="drawer-link flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/10 transition"><i class="fa-solid fa-comments text-gold w-5 text-center"></i> 教育相談マッチング</a>
+      <a href="#standards" class="drawer-link flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/10 transition"><i class="fa-solid fa-medal text-gold w-5 text-center"></i> 講師の認定基準</a>
+      <a href="#pricing" class="drawer-link flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/10 transition"><i class="fa-solid fa-tags text-gold w-5 text-center"></i> 料金</a>
+      <a href="#flow" class="drawer-link flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/10 transition"><i class="fa-solid fa-route text-gold w-5 text-center"></i> ご利用の流れ</a>
+      <a href="#contact" class="drawer-link flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/10 transition"><i class="fa-solid fa-paper-plane text-gold w-5 text-center"></i> お問い合わせ</a>
+    </nav>
+    <div class="px-5 mt-2">
+      <a href="https://lin.ee/ny4sXSw" target="_blank" rel="noopener" class="flex items-center justify-center gap-2 w-full bg-gold hover:bg-gold-dark text-navy font-bold text-sm py-3 rounded-full transition">
+        <i class="fa-brands fa-line text-base"></i> 公式LINEで無料相談
+      </a>
+    </div>
+  </aside>
 
   <!-- ===== ① ヒーローセクション ===== -->
   <section id="hero" class="relative overflow-hidden bg-navy text-white">
@@ -148,7 +193,7 @@
   </section>
 
   <!-- ===== ② 親の悩み共感セクション ===== -->
-  <section class="py-14 px-5 bg-white">
+  <section id="worries" class="py-14 px-5 bg-white">
     <div class="max-w-4xl mx-auto reveal">
       <p class="text-center text-gold font-bold text-sm mb-2"><i class="fa-solid fa-comment-dots"></i> こんなお悩みありませんか？</p>
       <h2 class="text-center font-round font-bold text-2xl sm:text-3xl mb-8">ご家庭の「もやもや」に、寄り添います</h2>
@@ -220,7 +265,7 @@
   </section>
 
   <!-- ===== ③ サービスの4大特徴と他社比較 ===== -->
-  <section class="py-14 px-5 bg-navy text-white">
+  <section id="features" class="py-14 px-5 bg-navy text-white">
     <div class="max-w-5xl mx-auto">
       <div class="reveal text-center mb-10">
         <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-star"></i> KKMが選ばれる理由</p>
@@ -374,7 +419,7 @@
   </section>
 
   <!-- ===== ⑤ 講師のクオリティ「10の認定基準」（アコーディオン） ===== -->
-  <section class="py-14 px-5 bg-white">
+  <section id="standards" class="py-14 px-5 bg-white">
     <div class="max-w-3xl mx-auto">
       <div class="reveal text-center mb-8">
         <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-medal"></i> 講師のクオリティ</p>
@@ -469,7 +514,7 @@
   </section>
 
   <!-- ===== ⑥ シンプルな料金プラン ===== -->
-  <section class="py-14 px-5 bg-slate-50">
+  <section id="pricing" class="py-14 px-5 bg-slate-50">
     <div class="max-w-4xl mx-auto">
       <div class="reveal text-center mb-8">
         <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-tags"></i> 料金プラン</p>
@@ -550,7 +595,7 @@
   </section>
 
   <!-- ===== ⑧ ご利用の流れ ===== -->
-  <section class="py-14 px-5 bg-navy text-white">
+  <section id="flow" class="py-14 px-5 bg-navy text-white">
     <div class="max-w-2xl mx-auto">
       <div class="reveal text-center mb-10">
         <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-route"></i> 家庭教師マッチング・ご利用の流れ</p>
@@ -645,6 +690,31 @@
         head.closest('.acc-item').classList.toggle('open');
       });
     });
+
+    // --- サイドドロワーメニュー ---
+    (function () {
+      var drawer = document.getElementById('drawer');
+      var overlay = document.getElementById('drawer-overlay');
+      function openMenu() {
+        drawer.classList.remove('translate-x-full');
+        overlay.classList.remove('opacity-0', 'pointer-events-none');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeMenu() {
+        drawer.classList.add('translate-x-full');
+        overlay.classList.add('opacity-0', 'pointer-events-none');
+        document.body.style.overflow = '';
+      }
+      document.getElementById('menu-open').addEventListener('click', openMenu);
+      document.getElementById('menu-close').addEventListener('click', closeMenu);
+      overlay.addEventListener('click', closeMenu);
+      document.querySelectorAll('.drawer-link').forEach(function (a) {
+        a.addEventListener('click', closeMenu);
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeMenu();
+      });
+    })();
 
     // --- スクロールで要素をふわっと表示 ---
     var observer = new IntersectionObserver(function (entries) {
