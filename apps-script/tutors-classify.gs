@@ -33,7 +33,7 @@ var CONFIG = {
   PUBLIC_SHEET_NAME: '公開用',
 };
 
-var GEMINI_MODEL = 'gemini-2.0-flash'; // 変更可
+var GEMINI_MODEL = 'gemini-2.5-flash'; // 変更可。429/limit:0が出る場合はモデル変更 or 個人Gmailのキーを使う
 
 /* AIが書き込む列（回答シートの右側に見出しを用意しておく） */
 var OUTPUT_HEADERS = [
