@@ -167,8 +167,9 @@
        やる気スイッチ  … competition / curiosity / safety （複数可）
      ===================================================================== */
   var CONFIG = {
-    SHEET_ID: '',     // ← ここにスプレッドシートIDを貼る
-    SHEET_GID: '0',   // 対象シートのgid（通常は 0）
+    SHEET_ID: '11mDZbRrOGUEuscU3YqI9wQnhTWemlqSdx2OcDyp-EOs', // 公開用スプレッドシートのID
+    SHEET_NAME: '公開用', // 読み込むタブ名（Apps Scriptが作るタブ名と一致させる）
+    SHEET_GID: '',        // タブ名の代わりにgidで指定したい場合はこちら（SHEET_NAMEを空に）
   };
 
   var LINE_URL = 'https://lin.ee/ny4sXSw';
@@ -304,8 +305,11 @@
       render();
       return;
     }
+    var q = CONFIG.SHEET_NAME
+      ? 'sheet=' + encodeURIComponent(CONFIG.SHEET_NAME)
+      : 'gid=' + encodeURIComponent(CONFIG.SHEET_GID || '0');
     var url = 'https://docs.google.com/spreadsheets/d/' + CONFIG.SHEET_ID +
-              '/gviz/tq?tqx=out:json&gid=' + encodeURIComponent(CONFIG.SHEET_GID);
+              '/gviz/tq?tqx=out:json&' + q;
     fetch(url).then(function (r) { return r.text(); }).then(function (text) {
       var json = JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
       var cols = json.table.cols.map(function (c) { return (c.label || '').trim(); });
