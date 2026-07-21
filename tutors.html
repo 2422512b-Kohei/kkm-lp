@@ -269,23 +269,23 @@
      サンプルデータ（SHEET_ID未設定・読み込み失敗時のフォールバック）
      ===================================================================== */
   var SAMPLE = [
-    { nickname:'たく先輩', major:'神戸大 工学部 2年', rating:4.2, subjects:'数学・理科', services:['tutor','consult'],
+    { nickname:'たく先輩', major:'神戸大 工学部 2年', rating:4.2, subjects:'数学・理科', services:['tutor','consult'], wage:'2,000円',
       comment:'田舎の公立校から独学メインで神大へ。「勉強のやり方が分からない」を一緒にほどきます。',
       origin:['local'], sibling:['first'], childhood:['free'], school:['public'],
       studystyle:['self'], aptitude:['effort'], stance:['companion'], comm:['empathy'], motivation:['safety','curiosity'] },
-    { nickname:'みなみ先輩', major:'神戸大 経済学部 3年', rating:4.6, subjects:'英語・国語', services:['tutor'],
+    { nickname:'みなみ先輩', major:'神戸大 経済学部 3年', rating:4.6, subjects:'英語・国語', services:['tutor'], wage:'2,500円',
       comment:'習い事づけの毎日から中学受験を経験。忙しい中でのペース配分の相談が得意です。',
       origin:['city'], sibling:['only'], childhood:['lessons'], school:['jhs'],
       studystyle:['cram'], aptitude:['inquiry'], stance:['leader'], comm:['logical'], motivation:['competition'] },
-    { nickname:'けん先輩', major:'神戸大 農学部 2年', rating:4.1, subjects:'理科・数学', services:['tutor','consult'],
+    { nickname:'けん先輩', major:'神戸大 農学部 2年', rating:4.1, subjects:'理科・数学', services:['tutor','consult'], wage:'1,800円',
       comment:'地方から塾に通って高校受験を突破。やる気が出ない時期の乗り越え方を等身大で話せます。',
       origin:['local'], sibling:['last'], childhood:['free'], school:['hs'],
       studystyle:['cram'], aptitude:['effort'], stance:['companion'], comm:['empathy'], motivation:['curiosity'] },
-    { nickname:'ゆい先輩', major:'神戸大 文学部 3年', rating:4.5, subjects:'文系全般・小論文', services:['consult'],
+    { nickname:'ゆい先輩', major:'神戸大 文学部 3年', rating:4.5, subjects:'文系全般・小論文', services:['consult'], wage:'',
       comment:'転勤族で各地を経験。都会の公立校で自分なりの勉強法を模索したタイプです。',
       origin:['transfer'], sibling:['middle'], childhood:['lessons'], school:['public'],
       studystyle:['self'], aptitude:['inquiry'], stance:['leader'], comm:['logical'], motivation:['safety'] },
-    { nickname:'そう先輩', major:'神戸大 理学部 2年', rating:4.3, subjects:'数学・物理', services:['tutor','consult'],
+    { nickname:'そう先輩', major:'神戸大 理学部 2年', rating:4.3, subjects:'数学・物理', services:['tutor','consult'], wage:'2,200円',
       comment:'中高一貫でのびのび探求。「なんで？」を一緒に面白がるのが得意です。',
       origin:['city'], sibling:['first'], childhood:['free'], school:['jhs'],
       studystyle:['self'], aptitude:['inquiry'], stance:['companion'], comm:['empathy'], motivation:['curiosity','competition'] },
@@ -364,6 +364,7 @@
           nickname: cell('ニックネーム') || '（ニックネーム未設定）',
           major: cell('学部学年') || '', rating: rating,
           subjects: cell('指導科目') || '', comment: cell('コメント') || '',
+          wage: String(cell('希望時給') || '').trim(),
           services: normalizeServices(cell('対応サービス')),
           origin: splitVals(cell('出身地')), sibling: splitVals(cell('きょうだい')),
           childhood: splitVals(cell('幼少期')), school: splitVals(cell('学校歴')),
@@ -460,6 +461,12 @@
           (sl.text === '両対応' ? 'bg-gold/20 text-navy border border-gold/40' : 'bg-navy text-white') + '">' +
           '<i class="fa-solid ' + sl.icon + ' mr-0.5"></i>' + sl.text + '</span>'
       : '';
+    var wageChip = '';
+    if (t.wage && (t.services || []).indexOf('tutor') >= 0) {
+      var w = t.wage.indexOf('時') < 0 ? t.wage + '／時' : t.wage;
+      wageChip = '<span class="text-[11px] font-bold bg-gold/15 text-navy border border-gold/30 rounded px-1.5 py-0.5">' +
+        '<i class="fa-solid fa-yen-sign mr-0.5"></i>希望時給 ' + w + '</span>';
+    }
 
     return '' +
     '<div class="card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 ' + (sel && score === 0 ? 'opacity-60' : '') + '">' +
@@ -469,6 +476,7 @@
             '<p class="font-round font-bold text-navy">' + t.nickname + '</p>' +
             svcChip +
             '<span class="text-[11px] bg-navy/5 text-navy rounded px-1.5 py-0.5">認定 ' + t.rating.toFixed(1) + '</span>' +
+            wageChip +
           '</div>' +
           '<p class="text-xs text-slate-500 mt-0.5">' + t.major + (t.subjects ? '｜指導：' + t.subjects : '') + '</p>' +
           (t.comment ? '<p class="text-sm text-slate-700 leading-relaxed mt-2">' + t.comment + '</p>' : '') +
