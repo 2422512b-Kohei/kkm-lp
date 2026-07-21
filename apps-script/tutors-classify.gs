@@ -122,7 +122,7 @@ function classifyRow(sheet, row) {
   });
   // ニックネーム用に、下の名前だけAIに渡す（フルネームは渡さない）
   var namePart = firstNameHint(getVal('氏名'));
-  if (namePart) lines.push('（呼び名のヒント：' + namePart + '）');
+  if (namePart) lines.push('（本名：' + namePart + '。この人の「下の名前」だけを使って親しみやすい呼び名を作り、名字やフルネームは出力しない）');
   if (!lines.length) return;
 
   var result = callAI(lines.join('\n'));
@@ -158,7 +158,7 @@ function firstNameHint(name) {
   var s = String(name || '').trim();
   if (!s) return '';
   var parts = s.split(/[\s　]+/);
-  return parts.length >= 2 ? parts[parts.length - 1] : '';
+  return parts.length >= 2 ? parts[parts.length - 1] : s;
 }
 
 function getHeaders(sheet) {
