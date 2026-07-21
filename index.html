@@ -62,6 +62,13 @@
     /* サイドドロワー */
     #drawer { transition: transform 0.3s ease; }
     #drawer-overlay { transition: opacity 0.3s ease; }
+    /* 注目CTAのやわらかいパルス */
+    @keyframes ctaPulse {
+      0%, 100% { box-shadow: 0 10px 20px rgba(245,166,35,0.30), 0 0 0 0 rgba(245,166,35,0.45); }
+      50%      { box-shadow: 0 12px 24px rgba(245,166,35,0.40), 0 0 0 10px rgba(245,166,35,0); }
+    }
+    .cta-pulse { animation: ctaPulse 2.2s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .cta-pulse { animation: none; } }
   </style>
 </head>
 
@@ -364,11 +371,12 @@
       </div>
       <p class="reveal text-center text-xs text-slate-500 mt-4">相談（低コスト・低ハードル）で信頼が生まれた後、家庭教師マッチングへ自然に進めます。</p>
 
-      <div class="reveal text-center mt-7">
-        <a href="tutors.html" class="inline-flex items-center gap-2 bg-navy hover:bg-navy-light text-white font-bold text-sm px-6 py-3 rounded-full shadow transition">
-          <i class="fa-solid fa-user-group text-gold"></i> 価値観で講師をさがす（かんたん5問診断）
+      <div class="reveal text-center mt-8">
+        <a href="tutors.html" class="cta-pulse group inline-flex items-center gap-3 bg-gold hover:bg-gold-dark text-navy font-bold text-base sm:text-lg px-8 py-4 rounded-full transition">
+          <i class="fa-solid fa-user-group text-xl"></i> 価値観のあう講師を探してみる
+          <i class="fa-solid fa-arrow-right transition-transform group-hover:translate-x-1"></i>
         </a>
-        <p class="text-xs text-slate-400 mt-2">あなたと共通点の多い神戸大生が見つかります</p>
+        <p class="text-xs text-slate-500 mt-3"><i class="fa-solid fa-wand-magic-sparkles text-gold mr-1"></i> かんたん5問で、あなたと共通点の多い神戸大生が見つかります</p>
       </div>
     </div>
   </section>
