@@ -298,8 +298,29 @@
     <div class="max-w-4xl mx-auto">
       <div class="reveal text-center mb-8">
         <p class="text-gold font-bold text-sm mb-2"><i class="fa-solid fa-layer-group"></i> サービス構造</p>
-        <h2 class="font-round font-bold text-2xl sm:text-3xl">選べる、2つのサービス</h2>
-        <p class="text-slate-600 text-sm mt-3 max-w-2xl mx-auto leading-relaxed">同じ<strong class="text-navy">認定講師プール</strong>から、目的に合わせて選べます。まず気軽に「相談」から、そのまま「指導」へ——という使い方も可能です。</p>
+        <h2 class="font-round font-bold text-2xl sm:text-3xl">メインは「家庭教師」。<br class="sm:hidden" />その入口に「教育相談」。</h2>
+        <p class="text-slate-600 text-sm mt-3 max-w-2xl mx-auto leading-relaxed">KKMの本命は<strong class="text-navy">家庭教師マッチング</strong>。「いきなり契約は不安…」という方のために、気軽な入口として<strong class="text-navy">教育相談マッチング</strong>を用意しました。<strong class="text-navy">同じ認定講師プール</strong>なので、相談した先生にそのまま指導を頼むこともできます。</p>
+      </div>
+
+      <!-- 入口 → 本命 の流れ -->
+      <div class="reveal grid sm:grid-cols-[1fr_auto_1.25fr] items-stretch gap-3 mb-9">
+        <!-- 入口：教育相談 -->
+        <div class="rounded-2xl border border-gold/50 bg-gold/5 p-5 flex flex-col">
+          <span class="self-start text-[11px] font-bold bg-gold/20 text-navy rounded-full px-2.5 py-1 mb-3"><i class="fa-solid fa-door-open mr-1"></i> まずは気軽な入口</span>
+          <h3 class="font-round font-bold text-navy flex items-center gap-2"><i class="fa-solid fa-comments text-gold"></i> 教育相談マッチング</h3>
+          <p class="text-xs text-slate-600 leading-relaxed mt-2">価値観の近い神大生に、<strong>30分だけ相談</strong>。<strong>2,000円</strong>・1回完結で、勧誘もありません。</p>
+        </div>
+        <!-- 矢印 -->
+        <div class="flex items-center justify-center text-gold text-2xl">
+          <i class="fa-solid fa-arrow-right hidden sm:block"></i>
+          <i class="fa-solid fa-arrow-down sm:hidden"></i>
+        </div>
+        <!-- 本命：家庭教師 -->
+        <div class="rounded-2xl bg-navy text-white p-5 shadow-xl ring-2 ring-gold flex flex-col">
+          <span class="self-start text-[11px] font-bold bg-gold text-navy rounded-full px-2.5 py-1 mb-3"><i class="fa-solid fa-star mr-1"></i> メインサービス</span>
+          <h3 class="font-round font-bold flex items-center gap-2"><i class="fa-solid fa-chalkboard-user text-gold"></i> 家庭教師マッチング</h3>
+          <p class="text-xs text-white/80 leading-relaxed mt-2">「憧れの先輩」が<strong class="text-white">継続で勉強習慣づくりに伴走</strong>。<strong class="text-gold">12,100円</strong>（初回のみ・以降月額0円）。</p>
+        </div>
       </div>
 
       <div class="reveal overflow-x-auto">
@@ -308,9 +329,11 @@
             <tr>
               <th class="text-left text-xs text-slate-500 font-medium p-3 w-24"></th>
               <th class="p-3 rounded-t-xl bg-navy text-white text-center">
+                <span class="inline-block text-[10px] font-bold bg-gold text-navy rounded-full px-1.5 py-0.5 mb-1">メイン</span><br />
                 <i class="fa-solid fa-chalkboard-user text-gold"></i><br class="sm:hidden" /> 家庭教師マッチング
               </th>
               <th class="p-3 rounded-t-xl bg-gold text-navy text-center">
+                <span class="inline-block text-[10px] font-bold bg-navy text-white rounded-full px-1.5 py-0.5 mb-1">入口</span><br />
                 <i class="fa-solid fa-comments"></i><br class="sm:hidden" /> 教育相談マッチング
               </th>
             </tr>
