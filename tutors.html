@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>講師紹介・価値観マッチング｜KKM</title>
-  <meta name="description" content="価値観・育ちの近い神戸大生を探せる講師紹介ページ。かんたん5問診断で、あなたと共通点の多い先輩が見つかります。" />
+  <title>条件から先生を探す｜KKM 講師紹介</title>
+  <meta name="description" content="育ち・受験ルート・接し方の相性など、条件から神戸大生の先生を探せます。あなたと近い先生から順に表示されます。" />
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -17,18 +17,13 @@
 
   <script>
     tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            navy: { DEFAULT: '#13294b', light: '#1e3a64', dark: '#0c1c34' },
-            gold: { DEFAULT: '#f5a623', light: '#ffc24d', dark: '#e08e0b' },
-          },
-          fontFamily: {
-            sans: ['"Noto Sans JP"', 'sans-serif'],
-            round: ['"Zen Maru Gothic"', 'sans-serif'],
-          },
+      theme: { extend: {
+        colors: {
+          navy: { DEFAULT: '#13294b', light: '#1e3a64', dark: '#0c1c34' },
+          gold: { DEFAULT: '#f5a623', light: '#ffc24d', dark: '#e08e0b' },
         },
-      },
+        fontFamily: { sans: ['"Noto Sans JP"', 'sans-serif'], round: ['"Zen Maru Gothic"', 'sans-serif'] },
+      } },
     };
   </script>
 
@@ -36,20 +31,20 @@
     html { scroll-behavior: smooth; }
     body { -webkit-tap-highlight-color: transparent; }
     @media (max-width: 768px) { body { padding-bottom: 80px; } }
-    /* 診断の選択チップ */
-    .opt input { position: absolute; opacity: 0; pointer-events: none; }
-    .opt span {
-      display: block; text-align: center; cursor: pointer;
-      border: 1px solid #e2e8f0; border-radius: 0.75rem;
-      padding: 0.6rem 0.5rem; font-size: 0.8rem; font-weight: 700;
-      color: #334155; background: #fff; transition: all 0.15s ease;
+    /* 条件チェックのチップ */
+    .chip input { position: absolute; opacity: 0; pointer-events: none; }
+    .chip > div {
+      border: 1px solid #e2e8f0; border-radius: 0.7rem; padding: 0.5rem 0.7rem;
+      cursor: pointer; transition: all 0.15s ease; background: #fff; height: 100%;
     }
-    .opt input:checked + span {
-      background: #13294b; color: #fff; border-color: #13294b;
-      box-shadow: 0 4px 10px rgba(19,41,75,0.15);
-    }
-    /* カードの並び替えアニメ */
-    .card { transition: box-shadow 0.2s ease; }
+    .chip > div:hover { border-color: #cbd5e1; }
+    .chip input:checked + div { background: #13294b; border-color: #13294b; box-shadow: 0 4px 10px rgba(19,41,75,0.15); }
+    .chip input:checked + div .l { color: #fff; }
+    .chip input:checked + div .d { color: rgba(255,255,255,0.7); }
+    .chip input:focus-visible + div { outline: 2px solid #f5a623; outline-offset: 2px; }
+    .chip .l { font-size: 0.8rem; font-weight: 700; color: #334155; line-height: 1.35; }
+    .chip .d { font-size: 0.66rem; color: #94a3b8; margin-top: 0.12rem; line-height: 1.3; }
+    .card { transition: box-shadow 0.2s ease, opacity 0.2s ease; }
   </style>
 </head>
 
@@ -68,53 +63,50 @@
     </div>
   </header>
 
-  <!-- ===== サンプル注記 ===== -->
-  <div class="bg-gold/15 border-b border-gold/30 text-navy text-xs px-4 py-2 text-center">
-    <i class="fa-solid fa-flask text-gold mr-1"></i> これは<strong>サンプル（ダミーデータ）</strong>です。実際の講師情報はGoogleフォームの回答から掲載します。
+  <!-- ===== データソース状態バナー（JSで内容を差し替え） ===== -->
+  <div id="sourceBanner" class="bg-gold/15 border-b border-gold/30 text-navy text-xs px-4 py-2 text-center">
+    <i class="fa-solid fa-circle-notch fa-spin text-gold mr-1"></i> 講師データを読み込み中…
   </div>
 
   <!-- ===== ヒーロー ===== -->
-  <section class="bg-navy text-white px-5 pt-10 pb-8">
+  <section class="bg-navy text-white px-5 pt-9 pb-8">
     <div class="max-w-4xl mx-auto text-center">
       <p class="inline-flex items-center gap-2 text-xs font-medium bg-white/10 border border-white/15 rounded-full px-3 py-1 mb-4">
-        <i class="fa-solid fa-people-arrows text-gold"></i> 価値観・育ちで探す、KKMだけのマッチング
+        <i class="fa-solid fa-magnifying-glass text-gold"></i> 価値観・育ちで探す、KKMだけのマッチング
       </p>
-      <h1 class="font-round font-bold text-3xl sm:text-4xl mb-3">「この人なら話せそう」<br class="sm:hidden" />で選べる。</h1>
+      <h1 class="font-round font-bold text-2xl sm:text-4xl mb-3"><i class="fa-solid fa-magnifying-glass text-gold"></i> 条件から先生を探す</h1>
       <p class="text-sm sm:text-base text-white/85 leading-relaxed max-w-2xl mx-auto">
-        学力や出身校ではなく、<span class="text-gold font-bold">価値観・育ちの近さ</span>で神戸大生を探せます。かんたん5問に答えると、あなたと<strong class="text-white">共通点の多い先輩</strong>から順に表示されます。
+        学力や出身校だけでなく、<span class="text-gold font-bold">育ち・歩んだルート・接し方の相性</span>で選べます。あてはまる条件を選ぶと、<strong class="text-white">近い先生から順に</strong>表示されます。
       </p>
     </div>
   </section>
 
-  <!-- ===== ① かんたん5問診断 ===== -->
+  <!-- ===== ① 条件検索パネル ===== -->
   <section class="px-5 py-8">
-    <div class="max-w-3xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-      <div class="flex items-center gap-2 mb-1">
-        <span class="w-8 h-8 rounded-lg bg-gold/15 text-gold flex items-center justify-center"><i class="fa-solid fa-clipboard-question"></i></span>
-        <h2 class="font-round font-bold text-lg">かんたん5問診断</h2>
-      </div>
-      <p class="text-xs text-slate-500 mb-5 pl-10">お子様・ご家庭に近いほうを選んでください。相性の近い先輩が見つかります。</p>
+    <div class="max-w-3xl mx-auto">
+      <form id="filters" class="space-y-5"></form>
 
-      <form id="quiz" class="space-y-5"></form>
-
-      <div class="mt-6 flex flex-col sm:flex-row gap-3">
-        <button id="matchBtn" type="button"
-          class="flex-1 inline-flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-navy font-bold py-3 rounded-full shadow transition">
-          <i class="fa-solid fa-magnifying-glass"></i> この条件で先輩を探す
-        </button>
-        <button id="resetBtn" type="button"
-          class="inline-flex items-center justify-center gap-2 border border-slate-300 text-slate-600 hover:bg-slate-100 font-bold py-3 px-5 rounded-full transition">
-          リセット
-        </button>
+      <!-- 操作バー（スクロール追従） -->
+      <div class="sticky bottom-20 md:bottom-4 z-30 mt-6">
+        <div class="bg-white/95 backdrop-blur border border-slate-200 shadow-lg rounded-2xl p-3 flex items-center gap-3">
+          <p class="text-xs text-slate-600 flex-1 pl-1">
+            選択中の条件：<span id="selCount" class="font-bold text-navy">0</span> 個
+          </p>
+          <button id="resetBtn" type="button" class="text-xs text-slate-500 hover:text-navy font-bold px-3 py-2">クリア</button>
+          <button id="searchBtn" type="button"
+            class="inline-flex items-center gap-2 bg-gold hover:bg-gold-dark text-navy font-bold text-sm px-5 py-2.5 rounded-full shadow transition">
+            <i class="fa-solid fa-magnifying-glass"></i> この条件で探す
+          </button>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- ===== ② 講師一覧 ===== -->
+  <!-- ===== ② 検索結果（講師一覧） ===== -->
   <section class="px-5 pb-14">
     <div class="max-w-3xl mx-auto">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="font-round font-bold text-xl"><i class="fa-solid fa-user-group text-gold mr-1"></i> 認定講師の紹介</h2>
+        <h2 class="font-round font-bold text-xl"><i class="fa-solid fa-user-group text-gold mr-1"></i> 先生の一覧</h2>
         <span id="resultNote" class="text-xs text-slate-500"></span>
       </div>
       <div id="tutorList" class="space-y-4"></div>
@@ -144,167 +136,339 @@
 
   <!-- ===== JavaScript ===== -->
   <script>
-    /* =========================================================
-       価値観・育ちタグの「軸」定義（5問）
-       各軸は2択。診断とマッチングの共通の物差しになります。
-       ========================================================= */
-    var AXES = [
-      { key: 'area',   q: 'ご家庭・お子様の環境は？', options: [
-          { val: 'local', label: '地方出身・のんびり' },
-          { val: 'city',  label: '都市部・情報多め' } ] },
-      { key: 'exam',   q: '受験スタイルは？', options: [
-          { val: 'public', label: '公立中心' },
-          { val: 'exam',   label: '中学受験など経験あり' } ] },
-      { key: 'sib',    q: 'きょうだい構成は？', options: [
-          { val: 'sib',   label: 'きょうだいがいる' },
-          { val: 'only',  label: '一人っ子' } ] },
-      { key: 'lesson', q: '習い事のスタイルは？', options: [
-          { val: 'many',  label: '習い事多め' },
-          { val: 'free',  label: 'のびのび系' } ] },
-      { key: 'study',  q: '勉強のさせ方の理想は？', options: [
-          { val: 'self',  label: '自分で勉強法を確立させたい' },
-          { val: 'cram',  label: '塾など伴走をつけたい' } ] },
-    ];
+  /* =====================================================================
+     【B案】Googleスプレッドシート直結の設定
+     ---------------------------------------------------------------------
+     SHEET_ID にスプレッドシートのIDを貼るだけで、回答が自動反映されます。
+     （空のままなら下部のサンプルデータで表示します）
 
-    /* =========================================================
-       講師データ（★ここをGoogleフォーム回答から生成 ★）
-       フォーム回答シートの列 → 下記プロパティに対応させます。
-         nickname : 公開用ニックネーム（本名は載せない）
-         major    : 学部・学年
-         rating   : 10基準の平均評価（4.0以上のみ掲載＝行の選抜）
-         subjects : 指導可能科目
-         comment  : 一言コメント（語り口調）
-         tags     : 各軸(AXESのkey)に対する回答値
-       ※ 公開してよい列だけを抜き出す＝「列の選抜」
-       ========================================================= */
-    var TUTORS = [
-      {
-        nickname: 'たく先輩', major: '神戸大 工学部 2年', rating: 4.2,
-        subjects: '数学・理科',
-        comment: '田舎の公立校から独学メインで神大へ。「勉強のやり方が分からない」を一緒にほどきます。',
-        tags: { area:'local', exam:'public', sib:'sib', lesson:'free', study:'self' }
-      },
-      {
-        nickname: 'みなみ先輩', major: '神戸大 経済学部 3年', rating: 4.6,
-        subjects: '英語・国語',
-        comment: '習い事づけの毎日から中学受験を経験。忙しい中でのペース配分の相談が得意です。',
-        tags: { area:'city', exam:'exam', sib:'only', lesson:'many', study:'cram' }
-      },
-      {
-        nickname: 'けん先輩', major: '神戸大 農学部 2年', rating: 4.1,
-        subjects: '理科・数学',
-        comment: '地方から塾に通って受験を突破。やる気が出ない時期の乗り越え方を等身大で話せます。',
-        tags: { area:'local', exam:'exam', sib:'sib', lesson:'free', study:'cram' }
-      },
-      {
-        nickname: 'ゆい先輩', major: '神戸大 文学部 3年', rating: 4.5,
-        subjects: '文系全般・小論文',
-        comment: '都会の公立校で自分なりの勉強法を模索したタイプ。「うちの子に合うやり方」を一緒に探します。',
-        tags: { area:'city', exam:'public', sib:'sib', lesson:'many', study:'self' }
-      },
-    ];
+     ■ スプレッドシート側の準備
+       1. 講師用Googleフォームの回答スプレッドシートを用意
+       2. 「共有」→「リンクを知っている全員」＝「閲覧者」にする
+       3. URL の /d/ と /edit の間がID：
+          docs.google.com/spreadsheets/d/【ここがID】/edit#gid=0
+       4. 1行目のヘッダーを下記「列名」に合わせる（詳細は SETUP-tutors-sheet.md）
 
-    /* 軸key/val → 表示ラベル 逆引き */
-    var LABEL = {};
-    AXES.forEach(function (ax) {
-      ax.options.forEach(function (o) { LABEL[ax.key + ':' + o.val] = o.label; });
+     ■ 列名（1行目のヘッダー）と入力値
+       公開            … 掲載する行だけ「TRUE / 公開 / ○」など
+       ニックネーム    … 例）たく先輩（本名は入れない）
+       学部学年        … 例）神戸大 工学部 2年
+       評価            … 10基準の平均（4.0以上のみ掲載されます）
+       指導科目        … 例）数学・理科
+       コメント        … 語り口調の一言
+       出身地          … local / city / transfer
+       きょうだい      … first / middle / last / only
+       幼少期          … lessons / free
+       学校歴          … public / jhs / hs  （複数可・カンマ区切り）
+       学習スタイル    … self / cram
+       得意不得意      … effort / inquiry
+       関わり方        … companion / leader
+       コミュニケーション … empathy / logical
+       やる気スイッチ  … competition / curiosity / safety （複数可）
+     ===================================================================== */
+  var CONFIG = {
+    SHEET_ID: '',     // ← ここにスプレッドシートIDを貼る
+    SHEET_GID: '0',   // 対象シートのgid（通常は 0）
+  };
+
+  var LINE_URL = 'https://lin.ee/ny4sXSw';
+
+  /* =====================================================================
+     条件の分類（画面の検索軸／講師タグの物差し）
+     ===================================================================== */
+  var GROUPS = [
+    {
+      cat: '育ち・育った環境', icon: 'fa-seedling',
+      catDesc: '家庭の雰囲気や、育ってきた感覚が近い先生がいい',
+      dims: [
+        { key: 'origin', label: '出身地', cols: 2, options: [
+          { val: 'local',    label: '地方出身',   desc: '地元の教育事情や上京の悩みがわかる' },
+          { val: 'city',     label: '都市部出身', desc: '都市部の進学・習い事環境に詳しい' },
+          { val: 'transfer', label: '転勤族・引っ越し経験あり' },
+        ]},
+        { key: 'sibling', label: 'きょうだい構成', cols: 2, options: [
+          { val: 'first',  label: '長子（第一子）' },
+          { val: 'middle', label: '中間子' },
+          { val: 'last',   label: '末っ子' },
+          { val: 'only',   label: '一人っ子' },
+        ]},
+        { key: 'childhood', label: '幼少期の過ごし方', cols: 2, options: [
+          { val: 'lessons', label: '習い事多め派', desc: '分刻みスケジュールで過ごした' },
+          { val: 'free',    label: 'のびのび派',   desc: '自由に育った' },
+        ]},
+      ],
+    },
+    {
+      cat: '受験・学習ルート', icon: 'fa-route',
+      catDesc: '自分と同じ（または目指す）ルートを経験した先生がいい',
+      dims: [
+        { key: 'school', label: '学校歴', cols: 1, options: [
+          { val: 'public', label: '公立中心',         desc: '地元の公立小中高から叩き上げ' },
+          { val: 'jhs',    label: '中学受験経験あり', desc: '中高一貫・私立カルチャーに理解あり' },
+          { val: 'hs',     label: '高校受験経験あり' },
+        ]},
+        { key: 'studystyle', label: '学習スタイル', cols: 2, options: [
+          { val: 'self', label: '独学・工夫型',     desc: '自分で計画・試行錯誤してきた' },
+          { val: 'cram', label: '塾・予備校活用型', desc: 'プロのレールに乗ってやりきった' },
+        ]},
+        { key: 'aptitude', label: '得意・不得意', cols: 2, options: [
+          { val: 'effort',  label: '努力型', desc: '苦労して克服／できない子の気持ちがわかる' },
+          { val: 'inquiry', label: '探求型', desc: '昔から勉強が好きだった' },
+        ]},
+      ],
+    },
+    {
+      cat: '接し方・相性', icon: 'fa-heart',
+      catDesc: 'うちの子の性格に合いそうな話しやすい先生がいい',
+      dims: [
+        { key: 'stance', label: '関わり方のスタンス', cols: 1, options: [
+          { val: 'companion', label: '伴走型', desc: '斜めの関係／お兄さん・お姉さん的な親しみやすさ' },
+          { val: 'leader',    label: '牽引型', desc: 'しっかりリード／頼れる指導者・師匠的ポジション' },
+        ]},
+        { key: 'comm', label: 'コミュニケーション', cols: 1, options: [
+          { val: 'empathy', label: 'じっくり共感・ほめて伸ばす派' },
+          { val: 'logical', label: '論理的・的確に課題解決派' },
+        ]},
+        { key: 'motivation', label: 'やる気スイッチの押し方', cols: 1, options: [
+          { val: 'competition', label: '競争・達成感を刺激',       desc: '「次は何点目指そう！」' },
+          { val: 'curiosity',   label: '好奇心・「面白さ」を刺激', desc: '「これ実はこういう仕組みで…」' },
+          { val: 'safety',      label: '心理的安全性・安心感重視', desc: '「焦らなくて大丈夫」' },
+        ]},
+      ],
+    },
+  ];
+
+  /* key:val → ラベル逆引き */
+  var LABEL = {};
+  GROUPS.forEach(function (g) { g.dims.forEach(function (d) {
+    d.options.forEach(function (o) { LABEL[d.key + ':' + o.val] = o.label; });
+  }); });
+  var DIM_KEYS = [];
+  GROUPS.forEach(function (g) { g.dims.forEach(function (d) { DIM_KEYS.push(d.key); }); });
+
+  /* =====================================================================
+     サンプルデータ（SHEET_ID未設定・読み込み失敗時のフォールバック）
+     ===================================================================== */
+  var SAMPLE = [
+    { nickname:'たく先輩', major:'神戸大 工学部 2年', rating:4.2, subjects:'数学・理科',
+      comment:'田舎の公立校から独学メインで神大へ。「勉強のやり方が分からない」を一緒にほどきます。',
+      origin:['local'], sibling:['first'], childhood:['free'], school:['public'],
+      studystyle:['self'], aptitude:['effort'], stance:['companion'], comm:['empathy'], motivation:['safety','curiosity'] },
+    { nickname:'みなみ先輩', major:'神戸大 経済学部 3年', rating:4.6, subjects:'英語・国語',
+      comment:'習い事づけの毎日から中学受験を経験。忙しい中でのペース配分の相談が得意です。',
+      origin:['city'], sibling:['only'], childhood:['lessons'], school:['jhs'],
+      studystyle:['cram'], aptitude:['inquiry'], stance:['leader'], comm:['logical'], motivation:['competition'] },
+    { nickname:'けん先輩', major:'神戸大 農学部 2年', rating:4.1, subjects:'理科・数学',
+      comment:'地方から塾に通って高校受験を突破。やる気が出ない時期の乗り越え方を等身大で話せます。',
+      origin:['local'], sibling:['last'], childhood:['free'], school:['hs'],
+      studystyle:['cram'], aptitude:['effort'], stance:['companion'], comm:['empathy'], motivation:['curiosity'] },
+    { nickname:'ゆい先輩', major:'神戸大 文学部 3年', rating:4.5, subjects:'文系全般・小論文',
+      comment:'転勤族で各地を経験。都会の公立校で自分なりの勉強法を模索したタイプです。',
+      origin:['transfer'], sibling:['middle'], childhood:['lessons'], school:['public'],
+      studystyle:['self'], aptitude:['inquiry'], stance:['leader'], comm:['logical'], motivation:['safety'] },
+    { nickname:'そう先輩', major:'神戸大 理学部 2年', rating:4.3, subjects:'数学・物理',
+      comment:'中高一貫でのびのび探求。「なんで？」を一緒に面白がるのが得意です。',
+      origin:['city'], sibling:['first'], childhood:['free'], school:['jhs'],
+      studystyle:['self'], aptitude:['inquiry'], stance:['companion'], comm:['empathy'], motivation:['curiosity','competition'] },
+  ];
+
+  var TUTORS = [];
+  var selected = {}; // { dimKey: Set(vals) }
+  DIM_KEYS.forEach(function (k) { selected[k] = {}; });
+  var searched = false;
+
+  /* --------- ユーティリティ --------- */
+  function splitVals(s) {
+    return String(s == null ? '' : s).split(/[,、\/\s]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+  function isPublic(v) {
+    var s = String(v == null ? '' : v).trim().toLowerCase();
+    return ['true','1','公開','○','yes','y','on'].indexOf(s) >= 0;
+  }
+  function selectedList() {
+    var out = [];
+    DIM_KEYS.forEach(function (k) { Object.keys(selected[k]).forEach(function (v) { out.push({ key:k, val:v }); }); });
+    return out;
+  }
+  function selectedCount() { return selectedList().length; }
+
+  /* =====================================================================
+     Googleスプレッドシートから読み込み（gviz JSON）
+     ===================================================================== */
+  function loadTutors() {
+    var banner = document.getElementById('sourceBanner');
+    if (!CONFIG.SHEET_ID) {
+      TUTORS = SAMPLE.slice();
+      banner.className = 'bg-gold/15 border-b border-gold/30 text-navy text-xs px-4 py-2 text-center';
+      banner.innerHTML = '<i class="fa-solid fa-flask text-gold mr-1"></i> スプレッドシート未接続：<strong>サンプル（ダミー）</strong>を表示中です。';
+      render();
+      return;
+    }
+    var url = 'https://docs.google.com/spreadsheets/d/' + CONFIG.SHEET_ID +
+              '/gviz/tq?tqx=out:json&gid=' + encodeURIComponent(CONFIG.SHEET_GID);
+    fetch(url).then(function (r) { return r.text(); }).then(function (text) {
+      var json = JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
+      var cols = json.table.cols.map(function (c) { return (c.label || '').trim(); });
+      var rows = json.table.rows || [];
+      function idx(name) { return cols.indexOf(name); }
+      var out = [];
+      rows.forEach(function (r) {
+        function cell(name) { var i = idx(name); return (i >= 0 && r.c[i]) ? r.c[i].v : ''; }
+        if (!isPublic(cell('公開'))) return;
+        var rating = parseFloat(cell('評価')) || 0;
+        if (rating < 4.0) return; // 行の選抜：認定4.0以上のみ
+        out.push({
+          nickname: cell('ニックネーム') || '（ニックネーム未設定）',
+          major: cell('学部学年') || '', rating: rating,
+          subjects: cell('指導科目') || '', comment: cell('コメント') || '',
+          origin: splitVals(cell('出身地')), sibling: splitVals(cell('きょうだい')),
+          childhood: splitVals(cell('幼少期')), school: splitVals(cell('学校歴')),
+          studystyle: splitVals(cell('学習スタイル')), aptitude: splitVals(cell('得意不得意')),
+          stance: splitVals(cell('関わり方')), comm: splitVals(cell('コミュニケーション')),
+          motivation: splitVals(cell('やる気スイッチ')),
+        });
+      });
+      TUTORS = out;
+      banner.className = 'bg-green-50 border-b border-green-200 text-green-700 text-xs px-4 py-2 text-center';
+      banner.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i> 最新の認定講師 <strong>' + out.length + ' 名</strong> を表示中です。';
+      render();
+    }).catch(function (e) {
+      TUTORS = SAMPLE.slice();
+      banner.className = 'bg-red-50 border-b border-red-200 text-red-600 text-xs px-4 py-2 text-center';
+      banner.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> スプレッドシートを読み込めませんでした（共有設定をご確認ください）。サンプルを表示しています。';
+      render();
     });
+  }
 
-    var LINE_URL = 'https://lin.ee/ny4sXSw';
-    var answers = {};   // { axisKey: val }
-
-    /* --- 診断フォームを描画 --- */
-    (function renderQuiz() {
-      var form = document.getElementById('quiz');
-      AXES.forEach(function (ax, i) {
-        var wrap = document.createElement('div');
-        wrap.innerHTML =
-          '<p class="text-sm font-bold mb-2"><span class="text-gold mr-1">Q' + (i + 1) + '.</span>' + ax.q + '</p>' +
-          '<div class="grid grid-cols-2 gap-2">' +
-            ax.options.map(function (o) {
-              return '<label class="opt"><input type="radio" name="' + ax.key + '" value="' + o.val + '"><span>' + o.label + '</span></label>';
-            }).join('') +
-          '</div>';
-        form.appendChild(wrap);
-      });
-      form.addEventListener('change', function (e) {
-        if (e.target.name) answers[e.target.name] = e.target.value;
-      });
-    })();
-
-    /* --- 講師カードのHTML --- */
-    function tutorCard(t, common, answered) {
-      var chips = AXES.map(function (ax) {
-        var val = t.tags[ax.key];
-        var hit = answered && answers[ax.key] === val;
-        return '<span class="text-[11px] rounded-full px-2.5 py-1 border ' +
-          (hit ? 'bg-gold text-navy border-gold font-bold' : 'bg-slate-50 text-slate-600 border-slate-200') +
-          '">' + (hit ? '<i class="fa-solid fa-check mr-0.5"></i>' : '') + LABEL[ax.key + ':' + val] + '</span>';
-      }).join('');
-
-      var badge = answered
-        ? '<span class="shrink-0 inline-flex flex-col items-center justify-center w-16 h-16 rounded-xl bg-navy text-white">' +
-            '<span class="text-[10px] text-white/70 leading-none">共通点</span>' +
-            '<span class="font-round font-bold text-2xl leading-none text-gold">' + common + '</span>' +
-            '<span class="text-[10px] text-white/70 leading-none">/ ' + AXES.length + '個</span>' +
-          '</span>'
-        : '<span class="shrink-0 inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gold/15 text-gold"><i class="fa-solid fa-star text-xl"></i></span>';
-
-      return '' +
-      '<div class="card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md">' +
-        '<div class="flex items-start gap-4">' +
-          badge +
-          '<div class="min-w-0 flex-1">' +
-            '<div class="flex items-center gap-2 flex-wrap">' +
-              '<p class="font-round font-bold text-navy">' + t.nickname + '</p>' +
-              '<span class="text-[11px] bg-navy/5 text-navy rounded px-1.5 py-0.5">認定 ' + t.rating.toFixed(1) + '</span>' +
+  /* =====================================================================
+     条件パネルの描画
+     ===================================================================== */
+  (function renderFilters() {
+    var form = document.getElementById('filters');
+    GROUPS.forEach(function (g) {
+      var sec = document.createElement('div');
+      sec.className = 'bg-white rounded-2xl border border-slate-200 shadow-sm p-5';
+      var dimsHtml = g.dims.map(function (d) {
+        var grid = d.cols === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2';
+        var opts = d.options.map(function (o) {
+          return '' +
+          '<label class="chip">' +
+            '<input type="checkbox" data-key="' + d.key + '" value="' + o.val + '">' +
+            '<div>' +
+              '<div class="l">' + o.label + '</div>' +
+              (o.desc ? '<div class="d">' + o.desc + '</div>' : '') +
             '</div>' +
-            '<p class="text-xs text-slate-500 mt-0.5">' + t.major + '｜指導：' + t.subjects + '</p>' +
-            '<p class="text-sm text-slate-700 leading-relaxed mt-2">' + t.comment + '</p>' +
-            '<div class="flex flex-wrap gap-1.5 mt-3">' + chips + '</div>' +
-          '</div>' +
+          '</label>';
+        }).join('');
+        return '' +
+        '<div>' +
+          '<p class="text-xs font-bold text-navy mb-2">' + d.label + '</p>' +
+          '<div class="grid ' + grid + ' gap-2">' + opts + '</div>' +
+        '</div>';
+      }).join('');
+      sec.innerHTML =
+        '<div class="mb-4">' +
+          '<h2 class="font-round font-bold text-base flex items-center gap-2"><i class="fa-solid ' + g.icon + ' text-gold"></i> ' + g.cat + '</h2>' +
+          '<p class="text-xs text-slate-500 mt-1">「' + g.catDesc + '」</p>' +
         '</div>' +
-        '<a href="' + LINE_URL + '" target="_blank" rel="noopener" ' +
-          'class="mt-4 flex items-center justify-center gap-2 w-full bg-navy hover:bg-navy-light text-white font-bold text-sm py-2.5 rounded-full transition">' +
-          '<i class="fa-brands fa-line text-green-400"></i> この先輩に相談してみる</a>' +
-      '</div>';
-    }
+        '<div class="space-y-4">' + dimsHtml + '</div>';
+      form.appendChild(sec);
+    });
 
-    /* --- 一覧を描画（answered=trueなら共通点で並び替え） --- */
-    function render(answered) {
-      var list = TUTORS.map(function (t) {
-        var common = AXES.reduce(function (n, ax) {
-          return n + (answered && answers[ax.key] === t.tags[ax.key] ? 1 : 0);
-        }, 0);
-        return { t: t, common: common };
+    form.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t.dataset || !t.dataset.key) return;
+      var k = t.dataset.key;
+      if (t.checked) selected[k][t.value] = true; else delete selected[k][t.value];
+      document.getElementById('selCount').textContent = selectedCount();
+    });
+  })();
+
+  /* =====================================================================
+     講師カード
+     ===================================================================== */
+  function tutorCard(t, score, sel) {
+    var chips = [];
+    GROUPS.forEach(function (g) { g.dims.forEach(function (d) {
+      (t[d.key] || []).forEach(function (v) {
+        var lab = LABEL[d.key + ':' + v];
+        if (!lab) return;
+        var hit = sel && selected[d.key][v];
+        chips.push('<span class="text-[11px] rounded-full px-2.5 py-1 border ' +
+          (hit ? 'bg-gold text-navy border-gold font-bold' : 'bg-slate-50 text-slate-600 border-slate-200') + '">' +
+          (hit ? '<i class="fa-solid fa-check mr-0.5"></i>' : '') + lab + '</span>');
       });
-      if (answered) {
-        list.sort(function (a, b) { return b.common - a.common || b.t.rating - a.t.rating; });
-      }
-      document.getElementById('tutorList').innerHTML =
-        list.map(function (x) { return tutorCard(x.t, x.common, answered); }).join('');
+    }); });
 
-      var note = document.getElementById('resultNote');
-      note.textContent = answered
-        ? '共通点の多い順に表示中'
-        : '全 ' + TUTORS.length + ' 名';
+    var total = sel ? selectedCount() : 0;
+    var badge = sel
+      ? '<span class="shrink-0 inline-flex flex-col items-center justify-center w-16 h-16 rounded-xl ' +
+          (score > 0 ? 'bg-navy' : 'bg-slate-300') + ' text-white">' +
+          '<span class="text-[10px] text-white/70 leading-none">一致</span>' +
+          '<span class="font-round font-bold text-2xl leading-none ' + (score > 0 ? 'text-gold' : 'text-white') + '">' + score + '</span>' +
+          '<span class="text-[10px] text-white/70 leading-none">/ ' + total + '件</span>' +
+        '</span>'
+      : '<span class="shrink-0 inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gold/15 text-gold"><i class="fa-solid fa-star text-xl"></i></span>';
+
+    return '' +
+    '<div class="card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 ' + (sel && score === 0 ? 'opacity-60' : '') + '">' +
+      '<div class="flex items-start gap-4">' + badge +
+        '<div class="min-w-0 flex-1">' +
+          '<div class="flex items-center gap-2 flex-wrap">' +
+            '<p class="font-round font-bold text-navy">' + t.nickname + '</p>' +
+            '<span class="text-[11px] bg-navy/5 text-navy rounded px-1.5 py-0.5">認定 ' + t.rating.toFixed(1) + '</span>' +
+          '</div>' +
+          '<p class="text-xs text-slate-500 mt-0.5">' + t.major + (t.subjects ? '｜指導：' + t.subjects : '') + '</p>' +
+          (t.comment ? '<p class="text-sm text-slate-700 leading-relaxed mt-2">' + t.comment + '</p>' : '') +
+          '<div class="flex flex-wrap gap-1.5 mt-3">' + chips.join('') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<a href="' + LINE_URL + '" target="_blank" rel="noopener" ' +
+        'class="mt-4 flex items-center justify-center gap-2 w-full bg-navy hover:bg-navy-light text-white font-bold text-sm py-2.5 rounded-full transition">' +
+        '<i class="fa-brands fa-line text-green-400"></i> この先生に相談してみる</a>' +
+    '</div>';
+  }
+
+  function render() {
+    var sel = searched && selectedCount() > 0;
+    var list = TUTORS.map(function (t) {
+      var score = sel ? selectedList().reduce(function (n, s) {
+        return n + ((t[s.key] || []).indexOf(s.val) >= 0 ? 1 : 0);
+      }, 0) : 0;
+      return { t: t, score: score };
+    });
+    if (sel) list.sort(function (a, b) { return b.score - a.score || b.t.rating - a.t.rating; });
+
+    document.getElementById('tutorList').innerHTML =
+      list.length ? list.map(function (x) { return tutorCard(x.t, x.score, sel); }).join('')
+                  : '<p class="text-center text-sm text-slate-500 py-8">該当する先生がまだ登録されていません。</p>';
+
+    var note = document.getElementById('resultNote');
+    if (sel) {
+      var matched = list.filter(function (x) { return x.score > 0; }).length;
+      note.textContent = '一致の多い順・' + matched + '名が条件にマッチ';
+    } else {
+      note.textContent = '全 ' + TUTORS.length + ' 名';
     }
+  }
 
-    /* --- ボタン操作 --- */
-    document.getElementById('matchBtn').addEventListener('click', function () {
-      var n = Object.keys(answers).length;
-      if (n === 0) { alert('1問以上えらんでください。'); return; }
-      render(true);
-      document.getElementById('tutorList').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    document.getElementById('resetBtn').addEventListener('click', function () {
-      answers = {};
-      document.getElementById('quiz').reset();
-      render(false);
-    });
+  /* --------- ボタン --------- */
+  document.getElementById('searchBtn').addEventListener('click', function () {
+    if (selectedCount() === 0) { alert('条件を1つ以上えらんでください。'); return; }
+    searched = true;
+    render();
+    document.querySelector('#tutorList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    DIM_KEYS.forEach(function (k) { selected[k] = {}; });
+    document.querySelectorAll('#filters input[type="checkbox"]').forEach(function (c) { c.checked = false; });
+    document.getElementById('selCount').textContent = '0';
+    searched = false;
+    render();
+  });
 
-    /* 初期表示 */
-    render(false);
+  /* --------- 起動 --------- */
+  loadTutors();
   </script>
 </body>
 </html>
