@@ -98,7 +98,7 @@
         <div id="serviceTabs" class="grid grid-cols-3 gap-2">
           <button type="button" data-svc="all" class="svc-tab active">どちらも見る</button>
           <button type="button" data-svc="tutor" class="svc-tab">家庭教師<span class="sub">継続して教わる</span></button>
-          <button type="button" data-svc="consult" class="svc-tab">教育相談<span class="sub">30分だけ相談</span></button>
+          <button type="button" data-svc="consult" class="svc-tab">教育・受験相談<span class="sub">30分だけ相談</span></button>
         </div>
       </div>
 
@@ -307,7 +307,7 @@
     splitVals(raw).forEach(function (t) {
       t = t.toLowerCase();
       if (['tutor','家庭教師','kateikyoushi','k'].indexOf(t) >= 0) set.tutor = 1;
-      if (['consult','教育相談','相談','soudan','c'].indexOf(t) >= 0) set.consult = 1;
+      if (['consult','教育相談','教育・受験相談','受験相談','相談','soudan','c'].indexOf(t) >= 0) set.consult = 1;
       if (['both','両方','両対応','両方対応','tc'].indexOf(t) >= 0) { set.tutor = 1; set.consult = 1; }
     });
     if (!set.tutor && !set.consult) { set.tutor = 1; set.consult = 1; }
@@ -318,7 +318,7 @@
     var t = svc.indexOf('tutor') >= 0, c = svc.indexOf('consult') >= 0;
     if (t && c) return { text:'両対応', icon:'fa-star' };
     if (t) return { text:'家庭教師', icon:'fa-chalkboard-user' };
-    if (c) return { text:'教育相談', icon:'fa-comments' };
+    if (c) return { text:'教育・受験相談', icon:'fa-comments' };
     return { text:'', icon:'' };
   }
   function isPublic(v) {
@@ -507,7 +507,7 @@
       list.length ? list.map(function (x) { return tutorCard(x.t, x.score, sel); }).join('')
                   : '<p class="text-center text-sm text-slate-500 py-8">条件に合う先生がまだ登録されていません。</p>';
 
-    var svcName = { all:'', tutor:'家庭教師 ', consult:'教育相談 ' }[serviceFilter];
+    var svcName = { all:'', tutor:'家庭教師 ', consult:'教育・受験相談 ' }[serviceFilter];
     var note = document.getElementById('resultNote');
     if (sel) {
       var matched = list.filter(function (x) { return x.score > 0; }).length;
