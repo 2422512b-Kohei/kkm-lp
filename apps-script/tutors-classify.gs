@@ -1,30 +1,15 @@
 /**
- * KKM 講師応募 → AI自動分類 ＋ 公開用シート同期（Google Apps Script）
+ * KKM 講師応募 → AI補助分類 ＋ 公開用シート同期（Google Apps Script）
  * =====================================================================
- * 応募フォームの自由記述（性格・勉強スタイル・自己PRなど）をAIが読み取り、
- * tutors.html が使うタグ列へ自動で振り分けます。
+ * 新・応募フォームに対応。選択式の回答はそのままコード化し、AIは
+ * 「出身地の地域タイプ・受験ルート・紹介コメント」だけを補助的に判定します。
  *
- * 【個人情報の扱い（重要）】
- *  ・回答シート（このスクリプトを置くシート）は「非公開」のまま運用します。
- *    氏名・メール・学生証などはこのシートだけに残します。
- *  ・サイトが読むのは、公開OKな項目だけを写した「公開用スプレッドシート」です。
- *    syncPublic() で、評価4.0以上かつ公開=TRUE の行だけを同期します。
+ * 【個人情報】回答シートは非公開のまま。公開用シートには公開OK列だけ同期。
+ * 【運営の手間】応募 → 自動分類 → 評価入力・公開TRUE → メニュー「公開用へ同期」
+ * 【AI】Google Gemini（無料枠）。末尾 callAI() を差し替えれば他社AIも可。
  *
- * 【運営の手間】応募が来る → AIがタグを自動記入 → 評価を手入力・公開をTRUE
- *              → メニュー「KKM → 公開用シートへ同期」
- *
- * 使うAI：Google Gemini（無料枠あり）。末尾 callAI() を差し替えれば他社AIも可。
- *
- * ------- 導入手順（初回だけ）-------
- * 1. フォームの回答スプレッドシートを開く（＝このシート／非公開のまま）
- * 2. 右側の空き列に、下記 OUTPUT_HEADERS ＋「評価」「公開」の見出しを追加
- * 3. 別に「公開用」スプレッドシートを新規作成し、そのIDを CONFIG に貼る
- *    （この公開用だけを「リンクを知っている全員＝閲覧者」に共有する）
- * 4. 拡張機能 → Apps Script にこのコードを貼り付けて保存
- * 5. Google AI Studio (aistudio.google.com/app/apikey) でAPIキーを発行し、
- *    「プロジェクトの設定 → スクリプト プロパティ」に GEMINI_API_KEY として登録
- * 6. 関数 installTrigger を1回実行（権限を許可）→ 以後フォーム送信で自動分類
- * 7. tutors.html の CONFIG.SHEET_ID に「公開用」スプレッドシートのIDを貼る
+ * ★導入は SETUP-tutors-sheet.md を参照。APIキーは スクリプトプロパティ
+ *   GEMINI_API_KEY に、公開用シートIDは下の CONFIG に設定してください。
  * =====================================================================
  */
 
@@ -33,24 +18,25 @@ var CONFIG = {
   PUBLIC_SHEET_NAME: '公開用',
 };
 
-var GEMINI_MODEL = 'gemini-2.5-flash'; // 変更可。429/limit:0が出る場合はモデル変更 or 個人Gmailのキーを使う
+var GEMINI_MODEL = 'gemini-2.5-flash'; // 429/limit:0が出る場合はモデル変更 or 個人Gmailのキー
 
-/* AIが書き込む列（回答シートの右側に見出しを用意しておく） */
+/* スクリプトが書き込む「正規化後」の列（回答シートの右側に用意しておく） */
 var OUTPUT_HEADERS = [
-  'ニックネーム', '学部学年', '指導科目', 'コメント',
+  'ニックネーム', '学部学年', '対応サービス', '希望時給', '指導志望学年', '指導科目',
+  '都道府県', '出身校', '部活・習い事', '受験経験', '自己PR', '目指す姿', 'コメント',
   '出身地', 'きょうだい', '幼少期', '学校歴',
   '学習スタイル', '得意不得意', '関わり方', 'コミュニケーション', 'やる気スイッチ',
   'AI処理日時'
 ];
 
-/* AIに渡さない列（個人情報・管理列・AIの出力列自身） */
-var EXCLUDE_FROM_INPUT = OUTPUT_HEADERS.concat([
-  'タイムスタンプ', 'メールアドレス', '氏名', '学生証の提示', '評価', '公開'
-]);
+/* フォーム読み取りの対象外（管理列 ＋ 出力列） */
+var ADMIN_HEADERS = ['タイムスタンプ', 'メールアドレス', '氏名', '学生証の提示', '評価', '公開'];
+var NON_FORM = OUTPUT_HEADERS.concat(ADMIN_HEADERS);
 
 /* サイト（公開用シート）に出す列。tutors.html の読み取り列と一致させる */
 var PUBLIC_HEADERS = [
-  '公開', 'ニックネーム', '学部学年', '評価', '対応サービス', '希望時給', '指導科目', 'コメント',
+  '公開', 'ニックネーム', '学部学年', '評価', '対応サービス', '希望時給', '指導志望学年', '指導科目',
+  '都道府県', '出身校', '部活・習い事', '受験経験', '自己PR', '目指す姿', 'コメント',
   '出身地', 'きょうだい', '幼少期', '学校歴',
   '学習スタイル', '得意不得意', '関わり方', 'コミュニケーション', 'やる気スイッチ'
 ];
@@ -65,7 +51,6 @@ function onOpen() {
     .addToUi();
 }
 
-/* ------- フォーム送信トリガー設置（1回だけ） ------- */
 function installTrigger() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ScriptApp.getProjectTriggers().forEach(function (t) {
@@ -81,7 +66,6 @@ function onFormSubmitAI(e) {
   classifyRow(sheet, row);
 }
 
-/* ------- 選択行を分類 ------- */
 function classifySelectedRows() {
   var sheet = SpreadsheetApp.getActiveSheet();
   var rng = sheet.getActiveRange();
@@ -90,10 +74,9 @@ function classifySelectedRows() {
     if (r === 1) continue;
     classifyRow(sheet, r); n++; Utilities.sleep(300);
   }
-  SpreadsheetApp.getUi().alert(n + ' 行をAI分類しました。');
+  SpreadsheetApp.getUi().alert(n + ' 行を分類しました。');
 }
 
-/* ------- 未処理（AI処理日時が空）を一括 ------- */
 function classifyUnprocessedRows() {
   var sheet = SpreadsheetApp.getActiveSheet();
   var headers = getHeaders(sheet);
@@ -103,62 +86,93 @@ function classifyUnprocessedRows() {
     if (doneCol >= 0 && sheet.getRange(r, doneCol + 1).getValue()) continue;
     classifyRow(sheet, r); n++; Utilities.sleep(400);
   }
-  SpreadsheetApp.getUi().alert(n + ' 行をAI分類しました。');
+  SpreadsheetApp.getUi().alert(n + ' 行を分類しました。');
 }
 
 /* ------- 1行を分類して書き込む ------- */
 function classifyRow(sheet, row) {
   var headers = getHeaders(sheet);
   var values = sheet.getRange(row, 1, 1, headers.length).getValues()[0];
-  function getVal(h) { var i = headers.indexOf(h); return i >= 0 ? values[i] : ''; }
+
+  // フォームの回答を、見出しのキーワードで取得（管理列・出力列は除外）
+  function getForm(kw) {
+    var i = headers.indexOf(kw);
+    if (i >= 0 && NON_FORM.indexOf(kw) < 0) return values[i];
+    for (var j = 0; j < headers.length; j++) {
+      var h = headers[j];
+      if (!h || NON_FORM.indexOf(h) >= 0) continue;
+      if (h.indexOf(kw) >= 0) return values[j];
+    }
+    return '';
+  }
   function put(h, v) { var c = headers.indexOf(h); if (c >= 0) sheet.getRange(row, c + 1).setValue(v); }
+  function has(v, s) { return String(v == null ? '' : v).indexOf(s) >= 0; }
 
-  // 応募者の回答（除外列以外の「見出し：回答」を連結）
-  var lines = [];
-  headers.forEach(function (h, i) {
-    if (!h || EXCLUDE_FROM_INPUT.indexOf(h) >= 0) return;
-    var v = values[i];
-    if (v !== '' && v !== null && v !== undefined) lines.push(h + '：' + v);
-  });
-  // ニックネーム用に、下の名前だけAIに渡す（フルネームは渡さない）
-  var namePart = firstNameHint(getVal('氏名'));
-  if (namePart) lines.push('（本名：' + namePart + '。この人の「下の名前」だけを使って親しみやすい呼び名を作り、名字やフルネームは出力しない）');
-  if (!lines.length) return;
+  // ---- 選択式 → コードに直接マッピング ----
+  var sb = getForm('兄弟構成');
+  put('きょうだい', has(sb,'長子')?'first':has(sb,'中間')?'middle':has(sb,'末')?'last':has(sb,'一人')?'only':'');
 
-  var result = callAI(lines.join('\n'));
-  if (!result) return;
-  var arr = function (x) { return Array.isArray(x) ? x.join(', ') : (x || ''); };
+  var ch = getForm('幼少期');
+  put('幼少期', (has(ch,'習い事')||has(ch,'塾')||has(ch,'多忙'))?'lessons':(has(ch,'のびのび')||has(ch,'自由'))?'free':'');
 
-  put('ニックネーム', result.nickname);
-  put('コメント', result.comment);
-  put('出身地', result.origin);
-  put('きょうだい', result.sibling);
-  put('幼少期', result.childhood);
-  put('学校歴', arr(result.school));
-  put('学習スタイル', result.studystyle);
-  put('得意不得意', result.aptitude);
-  put('関わり方', result.stance);
-  put('コミュニケーション', result.comm);
-  put('やる気スイッチ', arr(result.motivation));
+  var ssty = getForm('勉強スタイル');
+  put('学習スタイル', has(ssty,'独学')?'self':(has(ssty,'塾')||has(ssty,'活用')||has(ssty,'先生'))?'cram':'');
 
-  // 学部学年・指導科目はフォーム回答から直接転記（AIより確実）
-  var faculty = String(getVal('学部') || '').trim();
-  var grade = String(getVal('学年') || '').trim();
-  if (grade && grade.indexOf('年') < 0 && /^\d+$/.test(grade)) grade += '年';
-  var major = ('神戸大 ' + faculty + ' ' + grade).replace(/\s+/g, ' ').trim();
-  if (faculty || grade) put('学部学年', major); else put('学部学年', result.major);
-  var subj = String(getVal('指導可能科目') || '').trim();
-  put('指導科目', subj || result.subjects);
+  var ap = getForm('勉強について');
+  put('得意不得意', has(ap,'克服')?'effort':has(ap,'好き')?'inquiry':'');
+
+  var st = getForm('指導スタイル');
+  put('関わり方', has(st,'両方')?'companion, leader':has(st,'伴走')?'companion':has(st,'牽引')?'leader':'');
+
+  var cm = getForm('コミュニケーション');
+  put('コミュニケーション', (has(cm,'共感')||has(cm,'ほめ'))?'empathy':(has(cm,'論理')||has(cm,'的確'))?'logical':'');
+
+  var mv = getForm('やる気'); var mo = [];
+  if (has(mv,'競争')||has(mv,'達成')) mo.push('competition');
+  if (has(mv,'好奇心')||has(mv,'面白')) mo.push('curiosity');
+  if (has(mv,'安心')||has(mv,'安全')||has(mv,'焦')) mo.push('safety');
+  put('やる気スイッチ', mo.join(', '));
+
+  // ---- 対応サービス（複数選択）→ tutor / consult ----
+  var sv = getForm('興味があるのはどれ') || getForm('2つのサービス') || getForm('サービス');
+  var svc = [];
+  if (has(sv,'家庭教師')) svc.push('tutor');
+  if (has(sv,'相談')) svc.push('consult');
+  put('対応サービス', svc.join(', '));
+
+  // ---- そのまま公開する項目（フォーム回答を転記） ----
+  var faculty = String(getForm('学部') || '').trim();
+  var grade = String(getForm('学年') || '').trim();
+  put('学部学年', ('神戸大 ' + faculty + ' ' + grade).replace(/\s+/g, ' ').trim());
+  put('ニックネーム', getForm('ニックネーム'));
+  put('希望時給', getForm('希望時給'));
+  put('指導志望学年', getForm('指導志望'));
+  put('指導科目', getForm('指導可能'));
+  put('都道府県', getForm('出身地'));
+  put('部活・習い事', getForm('部活'));
+  put('受験経験', getForm('推薦') || getForm('編入') || getForm('浪人'));
+  put('自己PR', getForm('自己PR'));
+  put('目指す姿', getForm('めざしたい') || getForm('家庭教師をめざ'));
+
+  // ---- AIで補助判定：地域タイプ・学校歴・出身校表示・コメント ----
+  var aiInput =
+    '出身地：' + getForm('出身地') + '\n' +
+    '引っ越し回数：' + getForm('引っ越し') + '\n' +
+    '出身中学・高校：' + (getForm('出身中学') || getForm('高校名')) + '\n' +
+    '大学の入試種別：' + getForm('入試種別') + '\n' +
+    '推薦・浪人・編入：' + (getForm('推薦') || getForm('編入')) + '\n' +
+    '性格：' + getForm('性格') + '\n' +
+    '得意な教え方：' + getForm('得意な教え方') + '\n' +
+    '自己PR：' + getForm('自己PR') + '\n' +
+    '目指す家庭教師像：' + (getForm('めざしたい') || getForm('家庭教師をめざ'));
+
+  var ai = callAI(aiInput) || {};
+  put('出身地', ai.origin || '');
+  put('学校歴', Array.isArray(ai.school) ? ai.school.join(', ') : (ai.school || ''));
+  put('出身校', ai.schoolType || '');
+  if (ai.comment) put('コメント', ai.comment);
 
   put('AI処理日時', new Date());
-}
-
-/* 氏名から「下の名前」だけを推定（姓名がスペース区切りなら後半、なければ空） */
-function firstNameHint(name) {
-  var s = String(name || '').trim();
-  if (!s) return '';
-  var parts = s.split(/[\s　]+/);
-  return parts.length >= 2 ? parts[parts.length - 1] : s;
 }
 
 function getHeaders(sheet) {
@@ -204,6 +218,7 @@ function isPublic(v) {
 
 /* =====================================================================
    AI呼び出し（Google Gemini）。他社AIに変える場合はここだけ差し替え。
+   出力：origin / school[] / schoolType / comment
    ===================================================================== */
 function callAI(profileText) {
   var key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
@@ -211,36 +226,19 @@ function callAI(profileText) {
 
   var prompt =
     'あなたは家庭教師紹介サービスKKMの運営アシスタントです。\n' +
-    '神戸大生の応募フォーム回答を読み、指定スキーマのJSONだけを出力してください。\n' +
-    '憶測で埋めず、判断材料がない項目は空文字""（配列項目は空配列[]）にしてください。\n' +
-    '出力に応募者の名字やフルネームは含めないでください。\n\n' +
-    '# 応募者の回答\n' + profileText + '\n\n' +
-    '# 出力スキーマ（このキー構成のJSONのみ・説明やコードブロックは不要）\n' +
+    '神戸大生の応募情報を読み、指定スキーマのJSONだけを出力してください。\n' +
+    '判断材料がない項目は空文字""（配列は[]）にしてください。実名や学校名は出力に含めないでください。\n\n' +
+    '# 応募情報\n' + profileText + '\n\n' +
+    '# 出力スキーマ（このキー構成のJSONのみ）\n' +
     '{\n' +
-    '  "nickname": "公開用の呼び名。呼び名のヒント（下の名前）があれば、それを短くした親しみやすい形＋「先輩」。なければ空。例: たく先輩",\n' +
-    '  "major": "所属（フォームに学部学年があれば空でよい）",\n' +
-    '  "subjects": "指導できる科目（フォームに指導可能科目があれば空でよい）",\n' +
-    '  "comment": "本人の魅力が伝わる語り口調の一言（60字以内・氏名なし）",\n' +
     '  "origin": "local | city | transfer のいずれか、または空",\n' +
-    '  "sibling": "first | middle | last | only のいずれか、または空",\n' +
-    '  "childhood": "lessons | free のいずれか、または空",\n' +
     '  "school": ["public | jhs | hs から該当（複数可）"],\n' +
-    '  "studystyle": "self | cram のいずれか、または空",\n' +
-    '  "aptitude": "effort | inquiry のいずれか、または空",\n' +
-    '  "stance": "companion | leader のいずれか、または空",\n' +
-    '  "comm": "empathy | logical のいずれか、または空",\n' +
-    '  "motivation": ["competition | curiosity | safety から該当（複数可）"]\n' +
+    '  "schoolType": "出身校の公私のみを短く。学校名は書かない。例: 公立中・公立高 / 私立中高一貫",\n' +
+    '  "comment": "本人の魅力が伝わる語り口調の一言（60字以内・氏名/学校名なし）"\n' +
     '}\n\n' +
     '# コードの意味\n' +
-    'origin: local=地方出身 / city=都市部出身 / transfer=転勤族・引っ越し経験あり（出身校・最寄り駅などから判断）\n' +
-    'sibling: first=長子 / middle=中間子 / last=末っ子 / only=一人っ子（兄弟構成から）\n' +
-    'childhood: lessons=習い事多め派 / free=のびのび自由派（幼少期の過ごし方から）\n' +
-    'school: public=公立中心 / jhs=中学受験経験あり / hs=高校受験経験あり（出身中学高校・入試種別から）\n' +
-    'studystyle: self=独学・工夫型 / cram=塾・予備校活用型（中高時代の勉強スタイルから）\n' +
-    'aptitude: effort=努力型（苦労して克服）/ inquiry=探求型（昔から勉強好き）（性格・勉強についてから）\n' +
-    'stance: companion=伴走型（斜めの関係）/ leader=牽引型（頼れる指導者）（目指す家庭教師像・教え方から）\n' +
-    'comm: empathy=じっくり共感・ほめて伸ばす / logical=論理的・的確に課題解決（性格・教え方から）\n' +
-    'motivation: competition=競争・達成感 / curiosity=好奇心・面白さ / safety=心理的安全性・安心感（教え方・目指す像から）\n';
+    'origin: local=地方出身 / city=都市部出身 / transfer=転勤・引っ越しが多い（都道府県と引っ越し回数から判断）\n' +
+    'school: public=公立中心 / jhs=中学受験経験あり（私立中・中高一貫）/ hs=高校受験経験あり\n';
 
   var url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
             GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(key);

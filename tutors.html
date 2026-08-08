@@ -270,22 +270,32 @@
      ===================================================================== */
   var SAMPLE = [
     { nickname:'たく先輩', major:'神戸大 工学部 2年', rating:4.2, subjects:'数学・理科', services:['tutor','consult'], wage:'2,000円',
+      pref:'鳥取県', schoolText:'公立中・公立高', teachGrades:'小学生（4～6年）, 中学生', club:'高校: 野球部', examRoute:'', selfPR:'趣味は野球で体力に自信あり。飲食店バイトで接客も経験。',
+      goal:'「勉強のやり方が分からない」を一緒にほどく先生になりたいです。',
       comment:'田舎の公立校から独学メインで神大へ。「勉強のやり方が分からない」を一緒にほどきます。',
       origin:['local'], sibling:['first'], childhood:['free'], school:['public'],
       studystyle:['self'], aptitude:['effort'], stance:['companion'], comm:['empathy'], motivation:['safety','curiosity'] },
     { nickname:'みなみ先輩', major:'神戸大 経済学部 3年', rating:4.6, subjects:'英語・国語', services:['tutor'], wage:'2,500円',
+      pref:'大阪府', schoolText:'私立中高一貫', teachGrades:'中学生, 高校生', club:'高校: 吹奏楽部', examRoute:'推薦', selfPR:'ピアノ歴12年。人前で話すのが得意です。',
+      goal:'忙しい子のペース配分を一緒に設計できる先生に。',
       comment:'習い事づけの毎日から中学受験を経験。忙しい中でのペース配分の相談が得意です。',
       origin:['city'], sibling:['only'], childhood:['lessons'], school:['jhs'],
       studystyle:['cram'], aptitude:['inquiry'], stance:['leader'], comm:['logical'], motivation:['competition'] },
     { nickname:'けん先輩', major:'神戸大 農学部 2年', rating:4.1, subjects:'理科・数学', services:['tutor','consult'], wage:'1,800円',
+      pref:'島根県', schoolText:'公立中・公立高', teachGrades:'中学生, 高校生', club:'高校: サッカー部', examRoute:'浪人', selfPR:'一浪して合格。うまくいかない時期の過ごし方を語れます。',
+      goal:'やる気が出ない時期に寄り添える先生になりたい。',
       comment:'地方から塾に通って高校受験を突破。やる気が出ない時期の乗り越え方を等身大で話せます。',
       origin:['local'], sibling:['last'], childhood:['free'], school:['hs'],
       studystyle:['cram'], aptitude:['effort'], stance:['companion'], comm:['empathy'], motivation:['curiosity'] },
     { nickname:'ゆい先輩', major:'神戸大 文学部 3年', rating:4.5, subjects:'文系全般・小論文', services:['consult'], wage:'',
+      pref:'兵庫県', schoolText:'公立中・公立高', teachGrades:'中学生, 高校生', club:'高校: 書道・ボランティア', examRoute:'編入', selfPR:'転勤で各地を経験。読書と文章を書くのが好きです。',
+      goal:'「自分に合う勉強法」を一緒に探す伴走者に。',
       comment:'転勤族で各地を経験。都会の公立校で自分なりの勉強法を模索したタイプです。',
       origin:['transfer'], sibling:['middle'], childhood:['lessons'], school:['public'],
       studystyle:['self'], aptitude:['inquiry'], stance:['leader'], comm:['logical'], motivation:['safety'] },
     { nickname:'そう先輩', major:'神戸大 理学部 2年', rating:4.3, subjects:'数学・物理', services:['tutor','consult'], wage:'2,200円',
+      pref:'京都府', schoolText:'私立中高一貫', teachGrades:'小学生（4～6年）, 中学生, 高校生', club:'高校: 科学部', examRoute:'', selfPR:'趣味は天体観測。「なぜ？」を掘り下げるのが好きです。',
+      goal:'勉強の面白さを一緒に見つける先生に。',
       comment:'中高一貫でのびのび探求。「なんで？」を一緒に面白がるのが得意です。',
       origin:['city'], sibling:['first'], childhood:['free'], school:['jhs'],
       studystyle:['self'], aptitude:['inquiry'], stance:['companion'], comm:['empathy'], motivation:['curiosity','competition'] },
@@ -300,6 +310,11 @@
   /* --------- ユーティリティ --------- */
   function splitVals(s) {
     return String(s == null ? '' : s).split(/[,、\/\s]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
+    });
   }
   /* 「対応サービス」列 → ['tutor','consult'] に正規化（未設定は両対応扱い） */
   function normalizeServices(raw) {
@@ -366,6 +381,13 @@
           subjects: cell('指導科目') || '', comment: cell('コメント') || '',
           wage: String(cell('希望時給') || '').trim(),
           services: normalizeServices(cell('対応サービス')),
+          pref: String(cell('都道府県') || '').trim(),
+          schoolText: String(cell('出身校') || '').trim(),
+          teachGrades: String(cell('指導志望学年') || '').trim(),
+          club: String(cell('部活・習い事') || '').trim(),
+          examRoute: String(cell('受験経験') || '').trim(),
+          selfPR: String(cell('自己PR') || '').trim(),
+          goal: String(cell('目指す姿') || '').trim(),
           origin: splitVals(cell('出身地')), sibling: splitVals(cell('きょうだい')),
           childhood: splitVals(cell('幼少期')), school: splitVals(cell('学校歴')),
           studystyle: splitVals(cell('学習スタイル')), aptitude: splitVals(cell('得意不得意')),
@@ -468,19 +490,38 @@
         '<i class="fa-solid fa-yen-sign mr-0.5"></i>希望時給 ' + w + '</span>';
     }
 
+    function row(label, val) {
+      return val ? '<div class="flex gap-2 text-xs"><span class="shrink-0 text-slate-400 w-16">' + label +
+        '</span><span class="text-slate-700 flex-1 leading-relaxed">' + esc(val) + '</span></div>' : '';
+    }
+    var details = [
+      row('指導科目', t.subjects),
+      row('志望学年', t.teachGrades),
+      row('出身校', t.schoolText),
+      row('受験', t.examRoute),
+      row('部活等', t.club),
+      row('自己PR', t.selfPR),
+      row('目指す姿', t.goal)
+    ].join('');
+    var detailsBlock = details
+      ? '<div class="mt-3 pt-3 border-t border-slate-100 space-y-1.5">' + details + '</div>' : '';
+
+    var metaLine = esc(t.major) + (t.pref ? '｜出身：' + esc(t.pref) : '');
+
     return '' +
     '<div class="card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 ' + (sel && score === 0 ? 'opacity-60' : '') + '">' +
       '<div class="flex items-start gap-4">' + badge +
         '<div class="min-w-0 flex-1">' +
           '<div class="flex items-center gap-2 flex-wrap">' +
-            '<p class="font-round font-bold text-navy">' + t.nickname + '</p>' +
+            '<p class="font-round font-bold text-navy">' + esc(t.nickname) + '</p>' +
             svcChip +
             '<span class="text-[11px] bg-navy/5 text-navy rounded px-1.5 py-0.5">認定 ' + t.rating.toFixed(1) + '</span>' +
             wageChip +
           '</div>' +
-          '<p class="text-xs text-slate-500 mt-0.5">' + t.major + (t.subjects ? '｜指導：' + t.subjects : '') + '</p>' +
-          (t.comment ? '<p class="text-sm text-slate-700 leading-relaxed mt-2">' + t.comment + '</p>' : '') +
+          '<p class="text-xs text-slate-500 mt-0.5">' + metaLine + '</p>' +
+          (t.comment ? '<p class="text-sm text-slate-700 leading-relaxed mt-2">' + esc(t.comment) + '</p>' : '') +
           '<div class="flex flex-wrap gap-1.5 mt-3">' + chips.join('') + '</div>' +
+          detailsBlock +
         '</div>' +
       '</div>' +
       '<a href="' + LINE_URL + '" target="_blank" rel="noopener" ' +
