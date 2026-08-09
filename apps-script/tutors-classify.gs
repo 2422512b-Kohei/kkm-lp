@@ -51,13 +51,21 @@ function onOpen() {
     .addToUi();
 }
 
+/* UIが使えない実行文脈（エディタの実行ボタン等）でも落ちない通知 */
+function notify(msg) {
+  try { SpreadsheetApp.getUi().alert(msg); }
+  catch (e) {
+    try { SpreadsheetApp.getActiveSpreadsheet().toast(msg); } catch (e2) { Logger.log(msg); }
+  }
+}
+
 function installTrigger() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'onFormSubmitAI') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('onFormSubmitAI').forSpreadsheet(ss).onFormSubmit().create();
-  SpreadsheetApp.getUi().alert('自動分類トリガーを設置しました。');
+  notify('自動分類トリガーを設置しました。');
 }
 
 function onFormSubmitAI(e) {
@@ -74,7 +82,7 @@ function classifySelectedRows() {
     if (r === 1) continue;
     classifyRow(sheet, r); n++; Utilities.sleep(300);
   }
-  SpreadsheetApp.getUi().alert(n + ' 行を分類しました。');
+  notify(n + ' 行を分類しました。');
 }
 
 function classifyUnprocessedRows() {
@@ -86,7 +94,7 @@ function classifyUnprocessedRows() {
     if (doneCol >= 0 && sheet.getRange(r, doneCol + 1).getValue()) continue;
     classifyRow(sheet, r); n++; Utilities.sleep(400);
   }
-  SpreadsheetApp.getUi().alert(n + ' 行を分類しました。');
+  notify(n + ' 行を分類しました。');
 }
 
 /* ------- 1行を分類して書き込む ------- */
@@ -184,12 +192,11 @@ function getHeaders(sheet) {
    公開用スプレッドシートへ同期（評価4.0以上 かつ 公開=TRUE の行だけ）
    ===================================================================== */
 function syncPublic() {
-  var ui = SpreadsheetApp.getUi();
-  if (!CONFIG.PUBLIC_SPREADSHEET_ID) { ui.alert('CONFIG.PUBLIC_SPREADSHEET_ID を設定してください。'); return; }
+  if (!CONFIG.PUBLIC_SPREADSHEET_ID) { notify('CONFIG.PUBLIC_SPREADSHEET_ID を設定してください。'); return; }
   var src = SpreadsheetApp.getActiveSheet();
   var headers = getHeaders(src);
   var last = src.getLastRow();
-  if (last < 2) { ui.alert('データがありません。'); return; }
+  if (last < 2) { notify('データがありません。'); return; }
   var data = src.getRange(1, 1, last, headers.length).getValues();
   function col(h) { return headers.indexOf(h); }
 
@@ -208,7 +215,7 @@ function syncPublic() {
   var sh = dest.getSheetByName(CONFIG.PUBLIC_SHEET_NAME) || dest.insertSheet(CONFIG.PUBLIC_SHEET_NAME);
   sh.clearContents();
   sh.getRange(1, 1, out.length, PUBLIC_HEADERS.length).setValues(out);
-  ui.alert((out.length - 1) + ' 名を公開用シートへ同期しました。');
+  notify((out.length - 1) + ' 名を公開用シートへ同期しました。');
 }
 
 function isPublic(v) {
