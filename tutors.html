@@ -171,7 +171,7 @@
        公開            … 掲載する行だけ「TRUE / 公開 / ○」など
        ニックネーム    … 例）たく先輩（本名は入れない）
        学部学年        … 例）神戸大 工学部 2年
-       評価            … 10基準の平均（4.0以上のみ掲載されます）
+       （評価は非公開）… 認定4.0以上の選抜は同期時に実施。数値はサイトに出しません
        指導科目        … 例）数学・理科
        コメント        … 語り口調の一言
        出身地          … local / city / transfer
@@ -373,8 +373,10 @@
       rows.forEach(function (r) {
         function cell(name) { var i = idx(name); return (i >= 0 && r.c[i]) ? r.c[i].v : ''; }
         if (!isPublic(cell('公開'))) return;
-        var rating = parseFloat(cell('評価')) || 0;
-        if (rating < 4.0) return; // 行の選抜：認定4.0以上のみ
+        // 評価（認定点）は非公開。公開用シートに列が無ければ選抜は同期側で実施済み。
+        var ratingRaw = cell('評価');
+        var rating = parseFloat(ratingRaw) || 0;
+        if (ratingRaw !== '' && rating < 4.0) return; // 旧シート互換：評価列がある時のみ選抜
         out.push({
           nickname: cell('ニックネーム') || '（ニックネーム未設定）',
           major: cell('学部学年') || '', rating: rating,
@@ -515,7 +517,7 @@
           '<div class="flex items-center gap-2 flex-wrap">' +
             '<p class="font-round font-bold text-navy">' + esc(t.nickname) + '</p>' +
             svcChip +
-            '<span class="text-[11px] bg-navy/5 text-navy rounded px-1.5 py-0.5">認定 ' + t.rating.toFixed(1) + '</span>' +
+            '<span class="text-[11px] bg-navy/5 text-navy rounded px-1.5 py-0.5">認定講師</span>' +
             wageChip +
           '</div>' +
           '<p class="text-xs text-slate-500 mt-0.5">' + metaLine + '</p>' +
